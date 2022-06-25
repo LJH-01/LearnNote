@@ -11,3 +11,13 @@
 dist/
 # Build files
 packages/*/lib/
+# IDEA工程文件
+.idea/
+*.iml
+# SVN控制目录
+.svn/
+# 备份文件
+*.bak
+zip/
+/bin
+*.log
