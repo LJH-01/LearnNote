@@ -860,7 +860,7 @@ private boolean tryCompensate(WorkQueue w) {
 ### join的唤醒
 调用t.join()之后，线程会被阻塞。接下来看另外一个线程在任务t执行完毕后如何唤醒阻塞的线程。
 
-任务的执行发生在doExec()方法里面，任务执行完成后，调用一个setDone()通知所有等待的线程。这里也做了两件事：
+任务的执行发生在doExec()方法里面，任务执行完成后，调用一个setCompletion()通知所有等待的线程。这里也做了两件事：
 
 把status置为完成状态。
 
