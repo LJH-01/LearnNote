@@ -543,6 +543,7 @@ private int externalAwaitDone() {
 	if (s >= 0 && (s = status) >= 0) {
 		boolean interrupted = false;
 		do {
+		    // 循环等待直到任务执行结束
 			if (U.compareAndSwapInt(this, STATUS, s, s | SIGNAL)) {
 				synchronized (this) {
 					if (status >= 0) {
