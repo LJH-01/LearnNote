@@ -877,6 +877,134 @@ private boolean tryCompensate(WorkQueue w) {
 (int) (c = ctl) < 0，即低32位的最高位为1，说明线程池已经进入了关闭状态。但线程池进入关闭状态，不代表所有的线程都会立马关闭。
 
 ### shutdown()与shutdownNow()的区别
+
+除shutdown和shutdownNow外，另外3个方法调用时，两个参数都是传false，如果当前状态是正常的则会立即返回，
+如果runState中已经有SHUTDOWN标识，即已经调用了shutdown方法，则会唤醒空闲的Worker线程执行剩余未执行完成的任务，加速线程池关闭，
+如果有未退出的活跃线程，则直接返回，需等待这些活跃线程将所有WorkQueue中剩余未执行的任务都执行完成。
+
+```java
+
+// 尝试去终止线程池
+// 两个参数都是传false，如果当前状态是正常的则会立即返回，如果此时runState小于0，即已经在关闭的过程中，则会尝试去关闭
+// now为true，对应shutdownNow方法,会无条件的终止，将所有WorkQueue中未执行的任务都取消掉，唤醒休眠的Worker线程，将正在执行的Worker线程标记为已中断，
+// now为false，enable为true，对应shutdown方法，不再接受新的任务，会等待WorkQueue未执行完成的任务都执行完
+private boolean tryTerminate(boolean now, boolean enable) {
+    int rs;
+    if (this == common)                       // cannot shut down
+        return false;
+    // 线程池正常运行
+    if ((rs = runState) >= 0) {
+        if (!enable)
+            return false;
+        // 如果enable为true
+        rs = lockRunState();                  // enter SHUTDOWN phase
+        // 获取锁，然后解锁修改state，加上SHUTDOWN标识
+        unlockRunState(rs, (rs & ~RSLOCK) | SHUTDOWN);
+    }
+    // enable为true或者runState中有SHUTDOWN标识
+    if ((rs & STOP) == 0) {
+        if (!now) {                           // check quiescence
+            for (long oldSum = 0L;;) {        // repeat until stable
+                WorkQueue[] ws; WorkQueue w; int m, b; long c;
+                long checkSum = ctl;
+                // 如果还有活跃的线程，返回false，等待线程执行完成
+                if ((int)(checkSum >> AC_SHIFT) + (config & SMASK) > 0)
+                    return false;             // still active workers
+                // 如果线程池未启动
+                if ((ws = workQueues) == null || (m = ws.length - 1) <= 0)
+                    break;                    // check queues
+                for (int i = 0; i <= m; ++i) {
+                    if ((w = ws[i]) != null) {
+                        // 如果w中有未执行完成任务
+                        if ((b = w.base) != w.top || w.scanState >= 0 ||
+                            w.currentSteal != null) {
+                            tryRelease(c = ctl, ws[m & (int)c], AC_UNIT);
+                            return false;     // arrange for recheck
+                        }
+                        checkSum += b;
+                        // 这类WorkQueue都不是跟Worker线程绑定的WorkerQueue
+                        if ((i & 1) == 0)
+                            // 如果i是偶数，将对应的WorkQueue的qlock置为-1，不再接受新的任务
+                            w.qlock = -1;     // try to disable external
+                    }
+                }
+                // 所有的WorkQueue遍历了多遍，没有活跃的线程数了，也没有待执行的任务了，且checkSum稳定了，说明该退出的能退出的线程都退出了，则跳出for循环，将
+                // runState加上STOP
+                if (oldSum == (oldSum = checkSum))
+                    break;
+            }
+        }
+        // 如果now为true 或者上面break跳出for循环
+        if ((runState & STOP) == 0) {
+            // 获取锁，然后解锁修改state，加上STOP
+            rs = lockRunState();              // enter STOP phase
+            unlockRunState(rs, (rs & ~RSLOCK) | STOP);
+        }
+    }
+
+    int pass = 0;                             // 3 passes to help terminate
+    for (long oldSum = 0L;;) {                // or until done or stable
+        WorkQueue[] ws; WorkQueue w; ForkJoinWorkerThread wt; int m;
+        long checkSum = ctl;
+        // 如果所有线程都退出了
+        if ((short)(checkSum >>> TC_SHIFT) + (config & SMASK) <= 0 ||
+            (ws = workQueues) == null || (m = ws.length - 1) <= 0) {
+            if ((runState & TERMINATED) == 0) {
+                // 修改状态，加上TERMINATED
+                rs = lockRunState();          // done
+                unlockRunState(rs, (rs & ~RSLOCK) | TERMINATED);
+                // 唤醒等待终止完成的线程
+                synchronized (this) { notifyAll(); } // for awaitTermination
+            }
+            break;
+        }
+        // 还有未退出的线程，遍历所有的WorkQueue
+        for (int i = 0; i <= m; ++i) {
+            if ((w = ws[i]) != null) {
+                checkSum += w.base;
+                // 置为-1，不再接受新的任务
+                w.qlock = -1;                 // try to disable
+                if (pass > 0) {
+                    // 清空所有的任务
+                    w.cancelAll();            // clear queue
+                    if (pass > 1 && (wt = w.owner) != null) {
+                        if (!wt.isInterrupted()) {
+                            try {             // unblock join
+                                // 将关联的Worker线程标记为中断
+                                wt.interrupt();
+                            } catch (Throwable ignore) {
+                            }
+                        }
+                        // 唤醒休眠中的worker线程，被唤醒后发现线程池终止了会自动退出，线程退出会将对应的WorkQueue置为null
+                        // 下一次for循环计算checkSum时值就变了
+                        if (w.scanState < 0)
+                            U.unpark(wt);     // wake up
+                    }
+                }
+            }
+        }
+        // 重置oldSum，重新遍历
+        if (checkSum != oldSum) {             // unstable
+            oldSum = checkSum;
+            pass = 0;
+        }
+        // checkSum等于oldSum，可能某个Worker线程在执行任务的过程中被长期阻塞了一直未退出，则此时pass会不断加1
+        // 超过一定次数后则终止外层for循环
+        else if (pass > 3 && pass > m)        // can't further help
+            break;
+        else if (++pass > 1) {                // try to dequeue
+            long c; int j = 0, sp;            // bound attempts
+            while (j++ <= m && (sp = (int)(c = ctl)) != 0)
+                // 唤醒休眠的Worker线程
+                tryRelease(c, ws[sp & m], AC_UNIT);
+        }
+    }
+    return true;
+}
+
+
+```
+
 二者的代码基本相同，都是调用tryTerminate(boolean, boolean)方法，其中一个传入的是false，另一个传入的是true。tryTerminate意为试图关闭ForkJoinPool，并不保证一定可以关闭成功：
 
 总结：shutdown()只拒绝新提交的任务；shutdownNow()会取消现有的全局队列和局部队列中的任务，同时唤醒所有空闲的线程，让这些线程自动退出。
@@ -889,3 +1017,4 @@ private boolean tryCompensate(WorkQueue w) {
 - https://juejin.cn/post/6901319824303980558#heading-25
 - https://mp.weixin.qq.com/s/KYh3EFJNoSkUv4YVWtMa6Q
 - https://pdai.tech/md/java/thread/java-thread-x-juc-executor-ForkJoinPool.html
+- https://blog.csdn.net/qq_31865983/article/details/106017610
