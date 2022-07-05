@@ -31,6 +31,9 @@
 
 [TCP以及HTTP长连接](docs/cs-basics/network/TCP以及HTTP的长连接.md)
 
+[拔掉网线再插上，TCP连接还在吗？](https://developer.aliyun.com/article/875118)
+
+
 ### 数据结构
 
 ### 算法
