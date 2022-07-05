@@ -51,6 +51,15 @@ TCP的保活机制就是用来解决此类问题，这个机制我们也可以�
 4. 规范建议keepalive保活包不应该包含数据，但也可以包含1个无意义的字节，比如0x0。
 5. TCP保活探测报文序列号将应该的TCP报文序列号减1，即下一次发送正常报文序号等于ACK序列号；总之保活报文不在窗口控制范围内，见[TCP连接请求过程(含keepalive)](docs/cs-basics/network/TCP连接请求过程(含keepalive).md)图解
 
+### TCP KeepAlive 机制的探测时间也太长了
+
+TCP KeepAlive  机制是 TCP 层（内核态） 实现的，它是给所有基于 TCP 传输协议的程序一个兜底的方案。
+实际上：我们通常在应用层自己实现一套探测机制，可以在较短的时间内，探测到对方是否存活。
+比如：一般Web 服务器都会提供 keepalive_timeout 参数，用来指定 HTTP 长连接的超时时间。
+如果设置了 HTTP 长连接的超时时间是 60 秒，Web 服务软件就会启动一个定时器，如果客户端在完后一个 HTTP 请求后，在 60 秒内都没有再发起新的请求，定时器的时间一到，就会触发回调函数来释放该连接。
+tomcat设置keepalive_timeout等于connect_timeout，一段时间没有请求会关闭这个四元组。
+
+
 ## HTTP的Connection: keep-alive
 
 ### 简介
