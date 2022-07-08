@@ -214,6 +214,7 @@ private DruidPooledConnection getConnectionInternal(long maxWait) throws SQLExce
 
   holder.incrementUseCount();
 
+  // 包装DruidConnectionHolder为DruidPooledConnection，所以close操作是在DruidPooledConnection里面的逻辑
   DruidPooledConnection poolalbeConnection = new DruidPooledConnection(holder);
   return poolalbeConnection;
 }
@@ -706,6 +707,88 @@ public void init() throws SQLException {
       LOG.info("{dataSource-" + this.getID() + "} inited");
     }
   }
+}
+
+// 初始化创建连接，得到真正的connection
+public Connection createPhysicalConnection() throws SQLException {
+  String url = this.getUrl();
+  Properties connectProperties = getConnectProperties();
+
+  String user;
+  if (getUserCallback() != null) {
+    user = getUserCallback().getName();
+  } else {
+    user = getUsername();
+  }
+
+  String password = getPassword();
+  PasswordCallback passwordCallback = getPasswordCallback();
+
+  if (passwordCallback != null) {
+    if (passwordCallback instanceof DruidPasswordCallback) {
+      DruidPasswordCallback druidPasswordCallback = (DruidPasswordCallback) passwordCallback;
+
+      druidPasswordCallback.setUrl(url);
+      druidPasswordCallback.setProperties(connectProperties);
+    }
+
+    char[] chars = passwordCallback.getPassword();
+    if (chars != null) {
+      password = new String(chars);
+    }
+  }
+
+  Properties physicalConnectProperties = new Properties();
+  if (connectProperties != null) {
+    physicalConnectProperties.putAll(connectProperties);
+  }
+
+  if (user != null && user.length() != 0) {
+    physicalConnectProperties.put("user", user);
+  }
+
+  if (password != null && password.length() != 0) {
+    physicalConnectProperties.put("password", password);
+  }
+
+  Connection conn;
+
+  long startNano = System.nanoTime();
+
+  try {
+    // 使用jdbc真正的创建连接
+    conn = createPhysicalConnection(url, physicalConnectProperties);
+
+    if (conn == null) {
+      throw new SQLException("connect error, url " + url + ", driverClass " + this.driverClass);
+    }
+
+    initPhysicalConnection(conn);
+
+    // 校验连接的有效性，使用MySqlValidConnectionChecker
+    validateConnection(conn);
+    createError = null;
+  } catch (SQLException ex) {
+    createErrorCount.incrementAndGet();
+    createError = ex;
+    lastCreateError = ex;
+    lastCreateErrorTimeMillis = System.currentTimeMillis();
+    throw ex;
+  } catch (RuntimeException ex) {
+    createErrorCount.incrementAndGet();
+    createError = ex;
+    lastCreateError = ex;
+    lastCreateErrorTimeMillis = System.currentTimeMillis();
+    throw ex;
+  } catch (Error ex) {
+    createErrorCount.incrementAndGet();
+    throw ex;
+  } finally {
+    long nano = System.nanoTime() - startNano;
+    createTimespan += nano;
+  }
+
+  return conn;
 }
 ```
 
