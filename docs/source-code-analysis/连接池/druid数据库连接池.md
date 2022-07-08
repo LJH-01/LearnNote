@@ -11,13 +11,13 @@ typora-root-url: ../../../image
 
 主要的类***DruidDataSource***
 
-![a42b78349a110a90bc6f0b49878bee04.png](../docs/source-code-analysis/连接池/assets/a42b78349a110a90bc6f0b49878bee04.png)
+![a42b78349a110a90bc6f0b49878bee04.png](assets/a42b78349a110a90bc6f0b49878bee04.png)
 
 
 
 使用数组来组成栈来实现 *DataSource* 的*getConnnection()* 以及 *close()* 操作
 
-![eaeeb0e57ae04546592350ba8ae6ede8.png](/../docs/source-code-analysis/连接池/assets/eaeeb0e57ae04546592350ba8ae6ede8.png)
+![eaeeb0e57ae04546592350ba8ae6ede8.png](assets/eaeeb0e57ae04546592350ba8ae6ede8.png)
 
 - 使用DruidConnectionHolder[] connections存放连接，
 - poolingCount的增加以及减少来实现stack的操作来实现*getConnnection()* 以及 *close()* 操作
@@ -979,7 +979,7 @@ public void shrink(boolean checkTime) {
 
 这里面出现一个问题：在并发量比较低的时候，会不断的清除有效的长连接的问题，建议minEvictableIdleTimeMillis配置为180000即3分钟，原因如下：
 
-![image-20220708220346422](/../docs/source-code-analysis/连接池/assets/image-20220708220346422.png)
+![image-20220708220346422](assets/image-20220708220346422.png)
 
 druid的1.1.9版本避免了把有效长连接关闭的问题
 
