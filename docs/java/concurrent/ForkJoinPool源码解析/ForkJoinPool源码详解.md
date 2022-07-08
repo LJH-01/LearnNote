@@ -3,7 +3,7 @@
 与ThreadPoolExector不同的是，除一个全局的任务队列之外，每个线程还有一个自己的局部队列。
 ### JDK普通线程池
 我们来看一下JDK普通线程池是咋玩的。
-![15206aae0465ea37fd78d956c9025c10.png](../_resources/15206aae0465ea37fd78d956c9025c10.png)
+![15206aae0465ea37fd78d956c9025c10.png](assets/15206aae0465ea37fd78d956c9025c10.png)
 任务都是丢到一个同步队列BlockingQueue中的。如果你了解JDK BlockingQueue的实现，就知道有界的同步队列都是用锁阻塞的，有些push/poll操作还共用一把锁。
 -  问题1:并行的任务有必要共用一个阻塞队列吗？
 - 问题2: 如果任务队列中的任务存在依赖，worker线程只能被阻塞着。啥意思呢？
@@ -13,14 +13,52 @@
 如果worker1当发现task1无法继续执行下去时，能够先把它放一边，继续拉取任务执行。这样效率是比较高的。
 ### ForkJoinPool
 Fork-Join框架通过Work−Stealing算法解决上面两个问题。
-![bb545ca689230a8e9a1b30ddec3aacad.png](../_resources/bb545ca689230a8e9a1b30ddec3aacad.png)
+![bb545ca689230a8e9a1b30ddec3aacad.png](assets/bb545ca689230a8e9a1b30ddec3aacad.png)
 -  每个线程拥有自己的任务队列，并且是双端队列。
 - 线程操作自己的任务队列是LIFO（Last in First out）模式。
 - 线程还可以偷取别的线程任务队列中的任务，模式为FIFO（First in First out）。
 #### 任务的生产和消费模式
-![56cb26add460155c0c7d5ac7bcdcd3db.png](../_resources/56cb26add460155c0c7d5ac7bcdcd3db.png)
+![56cb26add460155c0c7d5ac7bcdcd3db.png](assets/56cb26add460155c0c7d5ac7bcdcd3db.png)
 显然每个线程拥有自己的任务队列可以提高获取队列的并行度。
 双端任务队列将所属的自己线程的push/pop操作 和 其他线程的steal操作通过不同的模式区分开。这样只有当Base==Top-1时，pop操作和steal操作才会有冲突。
+
+#### join时执行任务的判断
+结合上面求和的例子，我们来看一下求1-10之间的数字和的求和任务的可能join过程：
+
+case1:任务未被偷
+
+![image-20220708224341254](assets/image-20220708224341254.png)
+
+假设求和 1-10任务被Thread1执行，fork出两个子任务：1-5 和 6-10，只要Thread1能判断出来要join的任务在自己的任务队列中，那当前join哪个子任务就把它取出来执行就可以。
+
+case2:任务被偷，此时自己的任务队列为空，可以帮助小偷执行它未完成的任务
+
+![image-20220708224403048](assets/image-20220708224403048.png)
+
+
+假设求和 1-10任务被Thread1执行，fork出两个子任务：1-5 和 6-10。6-10已成功执行完成，join返回了结果。但此时发现1-5被Thread2偷走了，自己的任务队列中已经没有任务可以执行了。此时Thread1可以找到小偷Thread2，并偷取Thread2的10-20任务来帮助它执行。
+
+case3:任务被偷，此时自己的任务队列不为空
+
+![image-20220708224415406](assets/image-20220708224415406.png)
+
+假设求和 1-10任务被Thread1执行，fork出两个子任务：1-5 和 6-10，要join 1-5时发现已经被Thread2偷走了，而自己队列中还有6-10等待join执行。不好意思帮不了小偷了。
+
+只好尝试挂起自己等待1-5的执行结果通知，并尝试唤醒空闲线程或者创建新的线程替代自己执行任务队列中的6-10任务。
+
+上述三种情况代码均在ForkJoinPool.awaitJoin方法中。整体思路是：
+
+当任务还在自己的队列：
+
+- 自己执行，获取结果。
+
+当被别人偷走阻塞了：
+- 自己又没任务执行，就帮助小偷执行任务。
+- 自己有任务要执行，就尝试挂起自己等待小偷的反馈结果，同时找队友帮助自己执行。
+
+这里任务模式有意思的是：
+scan/steal操作都是从Base处获取任务，那么更容易获取到大的任务执行，从而使得整体线程的资源分配更加均衡。
+任务队列所属的线程是LIFO的任务生产消费模式，刚好符合递归任务的执行顺序。
 
 #### 工作窃取队列
 关于全局队列，有一个关键点需要说明：它并非使用BlockingQueue，而是基于一个普通的数组得以实现。
@@ -149,7 +187,7 @@ ForkJoinWorkerThread刚开始运行时会调用ForkJoinWorkerThread.scan方法�
 - 直接通过 FJP 提交的外部任务(external/submissions task)，存放在 workQueues 的偶数槽位； 
 - 通过内部 fork 分割的子任务(Worker task)，存放在 workQueues 的奇数槽位。
 
-![0d719d2c3af1ac30d0fb9467a185eb83.png](../_resources/0d719d2c3af1ac30d0fb9467a185eb83.png)
+![0d719d2c3af1ac30d0fb9467a185eb83.png](assets/0d719d2c3af1ac30d0fb9467a185eb83.png)
 
 ## ForkJoinPool状态控制
 ### 状态变量ctl解析
@@ -450,7 +488,7 @@ final void signalWork(WorkQueue[] ws, WorkQueue q) {
 由于工作窃取队列的特性，操作是单线程的，所以此处不需要执行CAS操作。
 
 ### 外部提交任务
-![f512b8e053846b1c394e69caa7a9caee.png](../_resources/f512b8e053846b1c394e69caa7a9caee.png)
+![f512b8e053846b1c394e69caa7a9caee.png](assets/f512b8e053846b1c394e69caa7a9caee.png)
 
 外部多个线程会调用该方法，所以要加锁，入队列和扩容的逻辑和线程内部的队列基本相同。最后，调用signalWork()，通知一个空闲线程来取。
 
@@ -516,7 +554,7 @@ join会导致线程的层层嵌套阻塞
 
 ForkJoinTask的join()和invoke()方法都可以用来获取任务的执行结果(另外还有get方法也是调用了doJoin来获取任务结果，但是会响应运行时异常)，它们对外部提交任务的执行方式一致，都是通过externalAwaitDone方法等待执行结果。不同的是invoke()方法会直接执行当前任务；而join()方法则是在当前任务在队列 top 位时(通过tryUnpush方法判断)才能执行，如果当前任务不在 top 位或者任务执行失败调用ForkJoinPool.awaitJoin方法帮助执行或阻塞当前 join 任务。(所以在官方文档中建议了我们对ForkJoinTask任务的调用顺序，一对 fork-join操作一般按照如下顺序调用: a.fork(); b.fork(); b.join(); a.join();。因为任务 b 是后面进入队列，也就是说它是在栈顶的(top 位)，在它fork()之后直接调用join()就可以直接执行而不会调用ForkJoinPool.awaitJoin方法去等待）
 
-![e9cf52e16851484634da70ae1df1e926.png](../_resources/e9cf52e16851484634da70ae1df1e926.png)
+![e9cf52e16851484634da70ae1df1e926.png](assets/e9cf52e16851484634da70ae1df1e926.png)
 
 #### join的详细实现
 下面看一下代码的详细实现。
