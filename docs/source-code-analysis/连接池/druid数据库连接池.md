@@ -953,7 +953,7 @@ public void shrink(boolean checkTime) {
 
     int removeCount = evictList.size();
     // 把minEvictableIdleTimeMillis时间没有活跃的线程从connetions池里移除
-    // 原因：由于ISP的NAT网关清除一段时间内不使用的连接的存在，可能导致该长连接失效
+    // 原因：由于ISP的NAT网关清除一段时间内不使用的连接的存在，可能导致该长连接失效，mysql默认的长连接的超时时间是8小时
     if (removeCount > 0) {
       System.arraycopy(connections, removeCount, connections, 0, poolingCount - removeCount);
       Arrays.fill(connections, poolingCount - removeCount, poolingCount, null);
