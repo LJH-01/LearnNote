@@ -1,4 +1,4 @@
-# Tomcat类加载机制
+# Tomcat类加载机制以及Context的初始化
 
 [TOC]
 
@@ -48,7 +48,7 @@ private void initClassLoaders() {
 
 
 
-### ParallerWebAppClassLoader的初始化
+### Context的初始化包含ParallerWebAppClassLoader的初始化
 
 加载的类存放的位置
 
@@ -66,8 +66,6 @@ allResources[1]=classResources;// /WEB-INF/lib包含的jar中的类
 先看StandardContext.startInternal()的逻辑
 
 ```java
-org.apache.catalina.core.StandardContext#startInternal
-  
 protected synchronized void startInternal() throws LifecycleException {
 
     if(log.isDebugEnabled())
@@ -98,7 +96,7 @@ protected synchronized void startInternal() throws LifecycleException {
             log.debug("Configuring default Resources");
 
         try {
-          // 设置要加载的resources为StandardRoot
+            // 设置 context 的 Resources 为 StandardRoot
             setResources(new StandardRoot(this));
         } catch (IllegalArgumentException e) {
             log.error(sm.getString("standardContext.resourcesInit"), e);
@@ -106,7 +104,6 @@ protected synchronized void startInternal() throws LifecycleException {
         }
     }
     if (ok) {
-        // StandardRoot.startInternal() 初始化要加载allResources包含
         // StandardRoot.startInternal() 初始化要加载allResources包含
         // 重要:  1.mainResources: /WEB-INF/classes包含的jar中的类
         // 重要:  2.classResources: /WEB-INF/lib包含的jar中的类
@@ -230,6 +227,7 @@ protected synchronized void startInternal() throws LifecycleException {
             }
 
             // Notify our interested LifecycleListeners
+            // 利用 ContextConfig.lifecycleEvent 解析 web.xml
             fireLifecycleEvent(Lifecycle.CONFIGURE_START_EVENT, null);
 
             // Start our child containers, if not already started
@@ -320,6 +318,7 @@ protected synchronized void startInternal() throws LifecycleException {
         mergeParameters();
 
         // Call ServletContainerInitializers
+        // 真正调 ServletContainerInitializer.onStartup 方法
         for (Map.Entry<ServletContainerInitializer, Set<Class<?>>> entry :
             initializers.entrySet()) {
             try {
@@ -335,6 +334,7 @@ protected synchronized void startInternal() throws LifecycleException {
         // Configure and call application event listeners
         if (ok) {
             // 实例化EventListener, 并调用ServletContextListener的contextInitialized方法
+            // 例如: ContextLoaderListener
             if (!listenerStart()) {
                 log.error(sm.getString("standardContext.listenerFail"));
                 ok = false;
@@ -370,7 +370,7 @@ protected synchronized void startInternal() throws LifecycleException {
 
         // Load and initialize all "load on startup" servlets
         if (ok) {
-            // 加载配置了load-on-startup属性的Servlet
+            // 实例化配置了load-on-startup属性的Servlet,并调用Servlet.init方法
             if (!loadOnStartup(findChildren())){
                 log.error(sm.getString("standardContext.servletFail"));
                 ok = false;
@@ -467,7 +467,7 @@ protected void startInternal() throws LifecycleException {
 }
 ```
 
-分析allResources的赋值逻辑：
+**context的resources的来源分析**
 
 ```java
 org.apache.catalina.webresources.StandardRoot#startInternal
@@ -477,6 +477,7 @@ protected void startInternal() throws LifecycleException {
 
   // 创建DirResourceSet, 其中路径是: /webapps/context应用路径
   // 如果是跟路径/的话是/webapps/ROOT
+  // 放到mainResources里面
   main = createMainResourceSet();
 
   mainResources.add(main);
@@ -580,18 +581,14 @@ StandardContext#startInternal进行的步骤：
 1. 实例化StandardRoot
 
 2. 调StandardRoot.startInternal初始化该context要加载的资源
-
 3. 实例化WebappLoader
-
 4. 调WebappLoader.startInternal初始化该context的类加载器ParallelWebappClassLoader
-
-5. 实例化DefaultInstanceManager，在DefaultInstanceManager保存了tomcatClassLoader：commonClassLoader和context应用类加载器：ParallelWebappClassLoader
-
-6. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化EventListener, 并调用ServletContextListener的contextInitialized方法
-
-7. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化Filter, 并调用Filter的init方法
-
-8. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化配置了load-on-startup属性的Servlet,并调用Servlet.init方法
+5. 利用 ContextConfig.lifecycleEvent 解析 web.xml
+6. 实例化DefaultInstanceManager，在DefaultInstanceManager保存了tomcatClassLoader：commonClassLoader和context应用类加载器：ParallelWebappClassLoader
+7. 调用 ServletContainerInitializer.onStartup 方法
+8. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化EventListener, 并调用ServletContextListener的contextInitialized方法
+9. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化Filter, 并调用Filter的init方法
+10. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化配置了load-on-startup属性的Servlet,并调用Servlet.init方法
 
 ### Webapp中使用的都是ParallerWebAppClassLoader原因
 
