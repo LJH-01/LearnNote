@@ -872,12 +872,14 @@ public void service(org.apache.coyote.Request req, org.apache.coyote.Response re
         // Parse and set Catalina and configuration specific
         // request parameters
         // 底层适配类CoyoteAdapter解析底层(coyote包下)req、res，并配置Catalina和应用层request、response的属性值
+        // 组装 MappingData:url映射后的数据，表示一个url具体映射到哪个host，哪个context，哪个wrapper上
         postParseSuccess = postParseRequest(req, request, res, response);
         if (postParseSuccess) {
             //check valves if we support async
             request.setAsyncSupported(
                     connector.getService().getContainer().getPipeline().isAsyncSupported());
             // Calling the container
+            // 从 MappingData 中获取对应的host、context、wrapper
             connector.getService().getContainer().getPipeline().getFirst().invoke(
                     request, response);
         }
@@ -1715,11 +1717,12 @@ public void nextRequest() {
 3. 解析请求头
 4. 根据contextLength来选择InputFilter, 来解决拆包以及粘包问题，InputFilter来解析请求体
 5. 填充MappingData:  url映射后的数据，表示一个url具体映射到哪个host，哪个context，哪个wrapper上
-6. 访问web应用而第一次调用该Servlet时再加载并调用Servlet.init方法
-7. 调用filter.doFilter方法
-8. 调用servlet.service方法
-9. 重置inputBuffer的ByteBuffer的position解决粘包
-10. 重置 inputBuffer.byteBuffer.position 的来准备下次请求
+6. 从 MappingData 中获取对应的host、context、wrapper并利用责任链模式依次调用
+7. 访问web应用而第一次调用该Servlet时再加载并调用Servlet.init方法
+8. 调用filter.doFilter方法
+9. 调用servlet.service方法
+10. 重置inputBuffer的ByteBuffer的position解决粘包
+11. 重置 inputBuffer.byteBuffer.position 的来准备下次请求
 
 ## 参考
 
