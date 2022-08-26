@@ -1560,6 +1560,505 @@ public int doRead(ApplicationBufferHandler handler) throws IOException {
 }
 ```
 
+#### 写响应数据(3次复制)
+
+总结：一共经历2次复制才复制到操作系统的socket缓冲区，一共经历3次复制才把数据发送到网络上
+
+
+
+```java
+把响应中的数据写到 socket 中
+需要写到 socket 中的数据
+1.准备请求头以及请求体数据
+    1.1 其中 利用org.apache.coyote.http11.Http11Processor.Http11OutputBuffer 写响应头信息
+    1.2 其中 org.apache.catalina.connector.Response.OutputBuffer
+        存 HttpServletResponse.getOutputStream().print() 以及 HttpServletResponse.getWriter().write()
+        写入的数据，存响应体信息
+2.利用 Http11OutputBuffer 将请求头以及请求体写到暂存区 socketWrapper.socketBufferHandler.writeBuffer 中
+3.最后把 socketWrapper.socketBufferHandler.writeBuffer 中的数据写到 socket 缓冲区中
+```
+
+
+
+```java
+public void service(org.apache.coyote.Request req, org.apache.coyote.Response res)
+        throws Exception {
+
+    Request request = (Request) req.getNote(ADAPTER_NOTES);
+    Response response = (Response) res.getNote(ADAPTER_NOTES);
+
+    if (request == null) {
+        // Create objects
+        request = connector.createRequest();
+        request.setCoyoteRequest(req);
+        response = connector.createResponse();
+        response.setCoyoteResponse(res);
+
+        // Link objects
+        request.setResponse(response);
+        response.setRequest(request);
+
+        // Set as notes
+        req.setNote(ADAPTER_NOTES, request);
+        res.setNote(ADAPTER_NOTES, response);
+
+        // Set query string encoding
+        req.getParameters().setQueryStringCharset(connector.getURICharset());
+    }
+
+    if (connector.getXpoweredBy()) {
+        response.addHeader("X-Powered-By", POWERED_BY);
+    }
+
+    boolean async = false;
+    boolean postParseSuccess = false;
+
+    req.getRequestProcessor().setWorkerThreadName(THREAD_NAME.get());
+
+    try {
+        // Parse and set Catalina and configuration specific
+        // request parameters
+        // 底层适配类CoyoteAdapter解析底层(coyote包下)req、res，并配置Catalina和应用层request、response的属性值
+        // 组装 MappingData:url映射后的数据，表示一个url具体映射到哪个host，哪个context，哪个wrapper上
+        postParseSuccess = postParseRequest(req, request, res, response);
+        if (postParseSuccess) {
+            //check valves if we support async
+            request.setAsyncSupported(
+                    connector.getService().getContainer().getPipeline().isAsyncSupported());
+            // Calling the container
+            // 从 MappingData 中获取对应的host、context、wrapper并利用责任链模式依次调用
+            connector.getService().getContainer().getPipeline().getFirst().invoke(
+                    request, response);
+        }
+        if (request.isAsync()) {
+            async = true;
+            ReadListener readListener = req.getReadListener();
+            if (readListener != null && request.isFinished()) {
+                // Possible the all data may have been read during service()
+                // method so this needs to be checked here
+                ClassLoader oldCL = null;
+                try {
+                    oldCL = request.getContext().bind(false, null);
+                    if (req.sendAllDataReadEvent()) {
+                        req.getReadListener().onAllDataRead();
+                    }
+                } finally {
+                    request.getContext().unbind(false, oldCL);
+                }
+            }
+
+            Throwable throwable =
+                    (Throwable) request.getAttribute(RequestDispatcher.ERROR_EXCEPTION);
+
+            // If an async request was started, is not going to end once
+            // this container thread finishes and an error occurred, trigger
+            // the async error process
+            if (!request.isAsyncCompleting() && throwable != null) {
+                request.getAsyncContextInternal().setErrorState(throwable, true);
+            }
+        } else {
+            request.finishRequest();
+          // 把响应中的数据写到 socket 中
+          // 需要写到 socket 中的数据
+          // 1.准备请求头以及请求体数据
+          //     1.1 其中 利用org.apache.coyote.http11.Http11Processor.Http11OutputBuffer 写响应头信息
+          //     1.2 其中 org.apache.catalina.connector.Response.OutputBuffer
+          //         存 HttpServletResponse.getOutputStream().print() 以及 HttpServletResponse.getWriter().write()
+          //         写入的数据，存响应体信息
+          // 2.利用 Http11OutputBuffer 将请求头以及请求体写到暂存区 socketWrapper.socketBufferHandler.writeBuffer 中
+          // 3.最后把 socketWrapper.socketBufferHandler.writeBuffer 中的数据写到 socket 缓冲区中
+            response.finishResponse();
+        }
+
+    } catch (IOException e) {
+        // Ignore
+    } finally {
+        AtomicBoolean error = new AtomicBoolean(false);
+        res.action(ActionCode.IS_ERROR, error);
+
+        if (request.isAsyncCompleting() && error.get()) {
+            // Connection will be forcibly closed which will prevent
+            // completion happening at the usual point. Need to trigger
+            // call to onComplete() here.
+            res.action(ActionCode.ASYNC_POST_PROCESS,  null);
+            async = false;
+        }
+
+        // Access log
+        if (!async && postParseSuccess) {
+            // Log only if processing was invoked.
+            // If postParseRequest() failed, it has already logged it.
+            Context context = request.getContext();
+            Host host = request.getHost();
+            // If the context is null, it is likely that the endpoint was
+            // shutdown, this connection closed and the request recycled in
+            // a different thread. That thread will have updated the access
+            // log so it is OK not to update the access log here in that
+            // case.
+            // The other possibility is that an error occurred early in
+            // processing and the request could not be mapped to a Context.
+            // Log via the host or engine in that case.
+            long time = System.currentTimeMillis() - req.getStartTime();
+            if (context != null) {
+                context.logAccess(request, response, time, false);
+            } else if (response.isError()) {
+                if (host != null) {
+                    host.logAccess(request, response, time, false);
+                } else {
+                    connector.getService().getContainer().logAccess(
+                            request, response, time, false);
+                }
+            }
+        }
+
+        req.getRequestProcessor().setWorkerThreadName(null);
+
+        // Recycle the wrapper request and response
+        if (!async) {
+            updateWrapperErrorCount(request, response);
+            request.recycle();
+            response.recycle();
+        }
+    }
+}
+```
+
+
+
+```java
+public void finishResponse() throws IOException {
+    // Writing leftover bytes
+    outputBuffer.close();
+}
+```
+
+```java
+public void close() throws IOException {
+
+    if (closed) {
+        return;
+    }
+    if (suspended) {
+        return;
+    }
+
+    // If there are chars, flush all of them to the byte buffer now as bytes are used to
+    // calculate the content-length (if everything fits into the byte buffer, of course).
+    if (cb.remaining() > 0) {
+        flushCharBuffer();
+    }
+
+    if ((!coyoteResponse.isCommitted()) && (coyoteResponse.getContentLengthLong() == -1)
+            && !coyoteResponse.getRequest().method().equals("HEAD")) {
+        // If this didn't cause a commit of the response, the final content
+        // length can be calculated. Only do this if this is not a HEAD
+        // request since in that case no body should have been written and
+        // setting a value of zero here will result in an explicit content
+        // length of zero being set on the response.
+        if (!coyoteResponse.isCommitted()) {
+            coyoteResponse.setContentLength(bb.remaining());
+        }
+    }
+
+    // 写到暂存区 socketBufferHandler 中
+    if (coyoteResponse.getStatus() == HttpServletResponse.SC_SWITCHING_PROTOCOLS) {
+        doFlush(true);
+    } else {
+        doFlush(false);
+    }
+    closed = true;
+
+    // The request should have been completely read by the time the response
+    // is closed. Further reads of the input a) are pointless and b) really
+    // confuse AJP (bug 50189) so close the input buffer to prevent them.
+    Request req = (Request) coyoteResponse.getRequest().getNote(CoyoteAdapter.ADAPTER_NOTES);
+    req.inputBuffer.close();
+
+    // 写数据到 socket 缓冲区
+    coyoteResponse.action(ActionCode.CLOSE, null);
+}
+```
+
+
+
+```java
+protected void doFlush(boolean realFlush) throws IOException {
+
+    if (suspended) {
+        return;
+    }
+
+    try {
+        // 需要写到 socket 中的数据都先写到 Http11OutputBuffer 中再写到暂存区 socketBufferHandler 中,
+        doFlush = true;
+        if (initial) {
+            // 把响应头中的数据写到暂存区 socketBufferHandler 中
+            coyoteResponse.sendHeaders();
+            initial = false;
+        }
+        if (cb.remaining() > 0) {
+            flushCharBuffer();
+        }
+        if (bb.remaining() > 0) {
+            // 把在servlet中手动写的数据
+            // （例如：HttpServletResponse.getOutputStream().print("dfsfsd")）
+            // 写到暂存区 socketBufferHandler 中
+            flushByteBuffer();
+        }
+    } finally {
+        doFlush = false;
+    }
+
+    if (realFlush) {
+        coyoteResponse.action(ActionCode.CLIENT_FLUSH, null);
+        // If some exception occurred earlier, or if some IOE occurred
+        // here, notify the servlet with an IOE
+        if (coyoteResponse.isExceptionPresent()) {
+            throw new ClientAbortException(coyoteResponse.getErrorException());
+        }
+    }
+
+}
+```
+
+```java
+public void sendHeaders() {
+    action(ActionCode.COMMIT, this);
+    setCommitted(true);
+}
+```
+
+
+
+```java
+public void action(ActionCode actionCode, Object param) {
+    if (hook != null) {
+        if (param == null) {
+            hook.action(actionCode, this);
+        } else {
+            hook.action(actionCode, param);
+        }
+    }
+}
+```
+
+```java
+public final void action(ActionCode actionCode, Object param) {
+    switch (actionCode) {
+    // 'Normal' servlet support
+    case COMMIT: {
+        if (!response.isCommitted()) {
+            try {
+                // Validate and write response headers
+                // 写到暂存区 socketBufferHandler 中
+                prepareResponse();
+            } catch (IOException e) {
+                setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+            }
+        }
+        break;
+    }
+    case CLOSE: {
+        action(ActionCode.COMMIT, null);
+        try {
+            // 写数据到 socket 缓冲区
+            finishResponse();
+        } catch (CloseNowException cne) {
+            setErrorState(ErrorState.CLOSE_NOW, cne);
+        } catch (IOException e) {
+            setErrorState(ErrorState.CLOSE_CONNECTION_NOW, e);
+        }
+        break;
+    }
+    ...
+}
+```
+
+
+
+```java
+protected final void prepareResponse() throws IOException {
+
+    boolean entityBody = true;
+    contentDelimitation = false;
+
+    OutputFilter[] outputFilters = outputBuffer.getFilters();
+
+    if (http09 == true) {
+        // HTTP/0.9
+        outputBuffer.addActiveFilter(outputFilters[Constants.IDENTITY_FILTER]);
+        outputBuffer.commit();
+        return;
+    }
+
+    int statusCode = response.getStatus();
+    if (statusCode < 200 || statusCode == 204 || statusCode == 205 ||
+            statusCode == 304) {
+        // No entity body
+        outputBuffer.addActiveFilter
+            (outputFilters[Constants.VOID_FILTER]);
+        entityBody = false;
+        contentDelimitation = true;
+        if (statusCode == 205) {
+            // RFC 7231 requires the server to explicitly signal an empty
+            // response in this case
+            response.setContentLength(0);
+        } else {
+            response.setContentLength(-1);
+        }
+    }
+
+    MessageBytes methodMB = request.method();
+    if (methodMB.equals("HEAD")) {
+        // No entity body
+        outputBuffer.addActiveFilter
+            (outputFilters[Constants.VOID_FILTER]);
+        contentDelimitation = true;
+    }
+
+    // Sendfile support
+    if (endpoint.getUseSendfile()) {
+        prepareSendfile(outputFilters);
+    }
+
+    // Check for compression
+    boolean isCompressible = false;
+    boolean useCompression = false;
+    if (entityBody && (compressionLevel > 0) && sendfileData == null) {
+        isCompressible = isCompressible();
+        if (isCompressible) {
+            useCompression = useCompression();
+        }
+        // Change content-length to -1 to force chunking
+        if (useCompression) {
+            response.setContentLength(-1);
+        }
+    }
+
+    MimeHeaders headers = response.getMimeHeaders();
+    // A SC_NO_CONTENT response may include entity headers
+    if (entityBody || statusCode == HttpServletResponse.SC_NO_CONTENT) {
+        String contentType = response.getContentType();
+        if (contentType != null) {
+            headers.setValue("Content-Type").setString(contentType);
+        }
+        String contentLanguage = response.getContentLanguage();
+        if (contentLanguage != null) {
+            headers.setValue("Content-Language")
+                .setString(contentLanguage);
+        }
+    }
+
+    long contentLength = response.getContentLengthLong();
+    boolean connectionClosePresent = false;
+    if (contentLength != -1) {
+        headers.setValue("Content-Length").setLong(contentLength);
+        outputBuffer.addActiveFilter
+            (outputFilters[Constants.IDENTITY_FILTER]);
+        contentDelimitation = true;
+    } else {
+        // If the response code supports an entity body and we're on
+        // HTTP 1.1 then we chunk unless we have a Connection: close header
+        connectionClosePresent = isConnectionClose(headers);
+        if (entityBody && http11 && !connectionClosePresent) {
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.CHUNKED_FILTER]);
+            contentDelimitation = true;
+            headers.addValue(Constants.TRANSFERENCODING).setString(Constants.CHUNKED);
+        } else {
+            outputBuffer.addActiveFilter
+                (outputFilters[Constants.IDENTITY_FILTER]);
+        }
+    }
+
+    if (useCompression) {
+        outputBuffer.addActiveFilter(outputFilters[Constants.GZIP_FILTER]);
+        headers.setValue("Content-Encoding").setString("gzip");
+    }
+    // If it might be compressed, set the Vary header
+    if (isCompressible) {
+        // Make Proxies happy via Vary (from mod_deflate)
+        MessageBytes vary = headers.getValue("Vary");
+        if (vary == null) {
+            // Add a new Vary header
+            headers.setValue("Vary").setString("Accept-Encoding");
+        } else if (vary.equals("*")) {
+            // No action required
+        } else {
+            // Merge into current header
+            headers.setValue("Vary").setString(
+                    vary.getString() + ",Accept-Encoding");
+        }
+    }
+
+    // Add date header unless application has already set one (e.g. in a
+    // Caching Filter)
+    if (headers.getValue("Date") == null) {
+        headers.addValue("Date").setString(
+                FastHttpDateFormat.getCurrentDate());
+    }
+
+    // FIXME: Add transfer encoding header
+
+    if ((entityBody) && (!contentDelimitation)) {
+        // Mark as close the connection after the request, and add the
+        // connection: close header
+        keepAlive = false;
+    }
+
+    // This may disabled keep-alive to check before working out the
+    // Connection header.
+    checkExpectationAndResponseStatus();
+
+    // If we know that the request is bad this early, add the
+    // Connection: close header.
+    if (keepAlive && statusDropsConnection(statusCode)) {
+        keepAlive = false;
+    }
+    if (!keepAlive) {
+        // Avoid adding the close header twice
+        if (!connectionClosePresent) {
+            headers.addValue(Constants.CONNECTION).setString(
+                    Constants.CLOSE);
+        }
+    } else if (!http11 && !getErrorState().isError()) {
+        headers.addValue(Constants.CONNECTION).setString(Constants.KEEPALIVE);
+    }
+
+    // Add server header
+    if (server == null) {
+        if (serverRemoveAppProvidedValues) {
+            headers.removeHeader("server");
+        }
+    } else {
+        // server always overrides anything the app might set
+        headers.setValue("Server").setString(server);
+    }
+
+    // Build the response header
+    try {
+        outputBuffer.sendStatus();
+
+        int size = headers.size();
+        for (int i = 0; i < size; i++) {
+            outputBuffer.sendHeader(headers.getName(i), headers.getValue(i));
+        }
+        outputBuffer.endHeaders();
+    } catch (Throwable t) {
+        ExceptionUtils.handleThrowable(t);
+        // If something goes wrong, reset the header buffer so the error
+        // response can be written instead.
+        outputBuffer.resetHeaderBuffer();
+        throw t;
+    }
+    // 把响应写到 暂存缓存区 socketBufferHandler 中
+    // 其中 需要写到 socket 中的数据都先写到 Http11OutputBuffer 中再写到暂存区 socketBufferHandler 中, 与 response 中的 outputBuffer 是一个引用
+    outputBuffer.commit();
+}
+```
+
+
+
 #### inputBuffer的收尾请求处理
 
 ```java
