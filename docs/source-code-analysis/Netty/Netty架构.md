@@ -59,6 +59,22 @@ server端通常设置为包含1个Boss NioEventLoopGroup和1个Worker NioEventLo
 
 ## Netty的核心组件
 
+### ChannelFuture以及ChannelFutureListener
+
+Netty 框架中所有的 I/O 操作都为异步的，因此我们需要 ChannelFuture 的 addListener()注册一个 ChannelFutureListener 监听事件，当操作执行成功或者失败时，监听就会自动触发返回结果。
+
+### Channel
+
+- 提供异步的网络I/O操作(如建立连接，读写，绑定端口)，异步调用意味着任何I / O调用都将立即返回，并且不保证在调用结束时所请求的I / O操作已完成。调用立即返回一个ChannelFuture实例，通过注册监听器到ChannelFuture上，可以I / O操作成功、失败或取消时回调通知调用方。
+
+不同协议、不同的阻塞类型的连接都有不同的 Channel 类型与之对应，下面是一些常用的 Channel 类型
+
+- NioSocketChannel，异步的客户端 TCP Socket 连接
+- NioServerSocketChannel，异步的服务器端 TCP Socket 连接
+- NioDatagramChannel，异步的 UDP 连接
+- NioSctpChannel，异步的客户端 Sctp 连接
+- NioSctpServerChannel，异步的 Sctp 服务器端连接 这些通道涵盖了 UDP 和 TCP网络 IO以及文件 IO.
+
 ### ChannelPipeline
 
 - 为 ChannelHandler 链提供了容器，当 channel 创建时，就会被自动分配到它专属的 ChannelPipeline，这个关联是永久性的。
@@ -131,3 +147,4 @@ NioEventLoopGroup，主要管理eventLoop的生命周期，可以理解为一个
 
 - https://www.jianshu.com/p/87f438abbd5d
 - https://juejin.cn/post/7049490068888616991
+- https://mp.weixin.qq.com/s?__biz=MzU3MzgwNTU2Mg==&mid=2247487309&idx=2&sn=a33cc56116cb7891145394f9c5353be3&chksm=fd3d49d8ca4ac0ce28cd0a543109d60db47e8be60d63c6951fa30e4ab4c812f9025286fa5c37&scene=21#wechat_redirect

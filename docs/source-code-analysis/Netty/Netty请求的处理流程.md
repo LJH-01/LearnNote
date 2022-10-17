@@ -1292,6 +1292,41 @@ public void read(ChannelHandlerContext ctx) {
 2. 校验 connect 成功
 3. 注册 read 事件
 
+### 小结
+
+**服务端处理流程：**
+
+1. io.netty.channel.AbstractChannel.AbstractUnsafe#register0方法进行了如下操作
+   1. Channel 注册到 Selector 上
+   2. 将 ChannelInitializer 内部添加的 handler ：ServerBootstrapAcceptor 添加到 pipeline 中，最终该channel的pipeline中的 ChannelHandler已添加完成
+   3. 回调 bind 端口，把绑定操作放到NioEventLoop.taskQueue中
+2. io.netty.bootstrap.AbstractBootstrap#doBind0方法bind端口，并在select上注册 accept 事件
+3. 在Boss NioEventLoop中处理accept事件，并将 SocketChannel 注册到 work NioEventLoop 的 Selector 上
+   1. 调用io.netty.channel.nio.AbstractNioMessageChannel.NioMessageUnsafe#read方法
+   2. 调 ServerSocketChannel.accept 获取 SocketChannel
+   3. 传播读事件，目前pipeline里面的channelhandler是ServerBootstrapAcceptor 调用 ServerBootstrapAcceptor.channelRead
+   4. 将 SocketChannel 注册到 work NioEventLoop 的 Selector 上
+   5. 最终调 register0 调 pipeline.fireChannelActive()
+   6. 在 work NioEventLoop 的 Selector 上注册读事件
+
+**客户端处理流程：**
+
+1. Channel 注册到 Selector 上
+2. 将 ChannelInitializer 内部添加的 handlers 添加到 pipeline 中，最终该channel的pipeline中的 ChannelHandler已添加完成
+3. 回调 doResolveAndConnect0，处理连接操作
+4. 进行连接操作，连接失败后，注册 connect 事件
+5. 处理 connnect 事件
+6. 校验 connect 成功
+7. 注册 read 事件
+
+**fireChannelActive的调用地方：**
+
+服务端绑定selector成功后，在回调boss线程中调用的 fireChannelActive进行注册accept事件
+
+服务端在收到accept事件之后，在work线程中调 register0 并在 register0 中调fireChannelActive进行注册read事件
+
+客户端在接收到connect事件之后，调fireChannelActive进行注册read事件
+
 ### 处理read事件
 
 ```java
@@ -1590,13 +1625,489 @@ protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
 }
 ```
 
+### 处理write操作
+
+小例子：
+
+```java
+f.channel().writeAndFlush(MsgUtil.buildMsg(f.channel().id().toString(), "你好，这里是客户端发来的消息1"))
+        .addListener(new ResponseListener());
+f.channel().write(MsgUtil.buildMsg(f.channel().id().toString(), "你好，这里是客户端发来的消息2"))
+        .addListener(new ResponseListener());
+f.channel().write(MsgUtil.buildMsg(f.channel().id().toString(), "你好，这里是客户端发来的消息3"))
+        .addListener(new ResponseListener());
+f.channel().write(MsgUtil.buildMsg(f.channel().id().toString(), "你好，这里是客户端发来的消息4"))
+        .addListener(new ResponseListener());
+f.channel().writeAndFlush(MsgUtil.buildMsg(f.channel().id().toString(), "你好，这里是客户端发来的消息5"))
+        .addListener(new ResponseListener());
+```
 
 
 
+```java
+private void write(Object msg, boolean flush, ChannelPromise promise) {
+    ObjectUtil.checkNotNull(msg, "msg");
+    try {
+        if (isNotValidPromise(promise, true)) {
+            ReferenceCountUtil.release(msg);
+            // cancelled
+            return;
+        }
+    } catch (RuntimeException e) {
+        ReferenceCountUtil.release(msg);
+        throw e;
+    }
 
-### 
+    final AbstractChannelHandlerContext next = findContextOutbound(flush ?
+            (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
+    final Object m = pipeline.touch(msg, next);
+    EventExecutor executor = next.executor();
+    if (executor.inEventLoop()) {
+        if (flush) {
+            // 写数据并且回调 ChannelFutureListener
+            next.invokeWriteAndFlush(m, promise);
+        } else {
+            // 写数据到缓存
+            next.invokeWrite(m, promise);
+        }
+    } else {
+        final WriteTask task = WriteTask.newInstance(next, m, promise, flush);
+        // 如果flush=true 写数据并且回调 ChannelFutureListener
+        if (!safeExecute(executor, task, promise, m, !flush)) {
+            // We failed to submit the WriteTask. We need to cancel it so we decrement the pending bytes
+            // and put it back in the Recycler for re-use later.
+            //
+            // See https://github.com/netty/netty/issues/8343.
+            task.cancel();
+        }
+    }
+}
+```
+
+最终都会放到NioEventLoop的线程队列中等待执行
+
+invokeWrite与 invokeWriteAndFlush的区别是：
+
+- invokeWriteAndFlush是放入到jvm缓存中之后，马上把数据通过socket写出去
+- invokeWrite是把数据放入到jvm缓存中之后，如果不调flush方法则数据不通过socket写出去
+
+invokeWrite方法：
+
+```java
+void invokeWrite(Object msg, ChannelPromise promise) {
+    if (invokeHandler()) {
+        // 写数据到缓存
+        invokeWrite0(msg, promise);
+    } else {
+        write(msg, promise);
+    }
+}
+```
+
+invokeWriteAndFlush方法：
+
+```java
+void invokeWriteAndFlush(Object msg, ChannelPromise promise) {
+    if (invokeHandler()) {
+        // 写数据到缓存
+        invokeWrite0(msg, promise);
+        // 真正写数据，并回调 ChannelFutureListener
+        invokeFlush0();
+    } else {
+        writeAndFlush(msg, promise);
+    }
+}
+```
 
 
 
+先分析 invokeWrite0 方法：
+
+调到 headcontext 的 write 方法
+
+```java
+public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+    unsafe.write(msg, promise);
+}
+```
+
+```java
+public final void write(Object msg, ChannelPromise promise) {
+    assertEventLoop();
+    // 在数据被写出到网络上之前，所有待写出的数据都会存放在outboundBuffer中，这个类相当于发送缓存
+    // 将来flush就是从outboundBuffer取出待写出数据写出到网络上
+    ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+    if (outboundBuffer == null) {
+        try {
+            // release message now to prevent resource-leak
+            ReferenceCountUtil.release(msg);
+        } finally {
+            // If the outboundBuffer is null we know the channel was closed and so
+            // need to fail the future right away. If it is not null the handling of the rest
+            // will be done in flush0()
+            // See https://github.com/netty/netty/issues/2362
+            safeSetFailure(promise,
+                    newClosedChannelException(initialCloseCause, "write(Object, ChannelPromise)"));
+        }
+        return;
+    }
+
+    int size;
+    try {
+        msg = filterOutboundMessage(msg);
+        size = pipeline.estimatorHandle().size(msg);
+        if (size < 0) {
+            size = 0;
+        }
+    } catch (Throwable t) {
+        try {
+            ReferenceCountUtil.release(msg);
+        } finally {
+            safeSetFailure(promise, t);
+        }
+        return;
+    }
+    // 要写的数据保存到缓存中
+    outboundBuffer.addMessage(msg, size, promise);
+}
+```
 
 
+
+其中 AbstractUnsafe 的 outboundBuffer 属性 ChannelOutboundBuffer 存放要写的数据
+
+```java
+public void addMessage(Object msg, int size, ChannelPromise promise) {
+    // 把msg对象封装成缓存节点对象
+    Entry entry = Entry.newInstance(msg, size, total(msg), promise);
+    if (tailEntry == null) {
+        flushedEntry = null;
+    } else {
+        Entry tail = tailEntry;
+        tail.next = entry;
+    }
+    tailEntry = entry;
+    if (unflushedEntry == null) {
+        unflushedEntry = entry;
+    }
+    // 更新缓存中的数据总字节大小
+    // increment pending bytes after adding message to the unflushed arrays.
+    // See https://github.com/netty/netty/issues/1619
+    incrementPendingOutboundBytes(entry.pendingSize, false);
+}
+```
+
+
+
+分析invokeFlush0方法
+
+最终调到 headcontext 的 flush 方法
+
+```java
+public void flush(ChannelHandlerContext ctx) {
+    // 真正写数据，并回调 ChannelFutureListener
+    unsafe.flush();
+}
+```
+
+
+
+```java
+public final void flush() {
+    assertEventLoop();
+
+    ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+    if (outboundBuffer == null) {
+        return;
+    }
+    // addFlush 的作用就是把 unflushedEntry 链表上的数据转移到 flushedEntry 链表上
+    outboundBuffer.addFlush();
+    // 真正写数据，并回调 ChannelFutureListener
+    flush0();
+}
+```
+
+
+
+```java
+protected void flush0() {
+    if (inFlush0) {
+        // Avoid re-entrance
+        return;
+    }
+
+    final ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+    if (outboundBuffer == null || outboundBuffer.isEmpty()) {
+        return;
+    }
+
+    inFlush0 = true;
+
+    // Mark all pending write requests as failure if the channel is inactive.
+    if (!isActive()) {
+        try {
+            // Check if we need to generate the exception at all.
+            if (!outboundBuffer.isEmpty()) {
+                if (isOpen()) {
+                    outboundBuffer.failFlushed(new NotYetConnectedException(), true);
+                } else {
+                    // Do not trigger channelWritabilityChanged because the channel is closed already.
+                    outboundBuffer.failFlushed(newClosedChannelException(initialCloseCause, "flush0()"), false);
+                }
+            }
+        } finally {
+            inFlush0 = false;
+        }
+        return;
+    }
+
+    try {
+        // 真正写数据，并回调 ChannelFutureListener
+        doWrite(outboundBuffer);
+    } catch (Throwable t) {
+        handleWriteError(t);
+    } finally {
+        inFlush0 = false;
+    }
+}
+```
+
+
+
+```java
+protected void doWrite(ChannelOutboundBuffer in) throws Exception {
+    // 获取java底层的SocketChannel
+    SocketChannel ch = javaChannel();
+    // 一次最多可以执行多少次刷出数据到网络操作
+    int writeSpinCount = config().getWriteSpinCount();
+    do {
+        if (in.isEmpty()) {
+            // All written so clear OP_WRITE
+            // 如果 SocketChannel 在 selector 上注册了 OP_WRITE 事件，那么写完数据之后，取消 SocketChannel 注册的 OP_WRITE 事件
+            clearOpWrite();
+            // Directly return here so incompleteWrite(...) is not called.
+            return;
+        }
+        // 每一次写操作最多可以写多少数据
+        // Ensure the pending writes are made of ByteBufs only.
+        int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
+        // 初始化写操作 ByteBuffer 数组，重要
+        ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
+        // 得到 ByteBuffer 数组的长度
+        int nioBufferCnt = in.nioBufferCount();
+
+        // Always use nioBuffers() to workaround data-corruption.
+        // See https://github.com/netty/netty/issues/2761
+        switch (nioBufferCnt) {
+            // ByteBuffer数组长度是0
+            case 0:
+                // We have something else beside ByteBuffers to write so fallback to normal writes.
+                // 比如写出的数据是FileRegion类型而不是ByteBuffer类型
+                writeSpinCount -= doWrite0(in);
+                break;
+            case 1: {
+                // Only one ByteBuf so use non-gathering write
+                // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
+                // to check if the total size of all the buffers is non-zero.
+                // 取得待刷ByteBuffer
+                ByteBuffer buffer = nioBuffers[0];
+                int attemptedBytes = buffer.remaining();
+                // 真正写数据
+                final int localWrittenBytes = ch.write(buffer);
+                if (localWrittenBytes <= 0) {
+                    // 如果SocketChannel没把数据写出去，说socket tcp写缓存已经满了
+                    // 那么通过incompleteWrite方法使得SocketChannel向selector注册OP_WRITE，等待socket tcp 写缓存可用
+                    incompleteWrite(true);
+                    return;
+                }
+                // 根据试图写入的数据量attemptedBytes，实际写入的数据量localWrittenBytes动态修改单次最大容许写入数据量maxBytesPerGatheringWrite
+                adjustMaxBytesPerGatheringWrite(attemptedBytes, localWrittenBytes, maxBytesPerGatheringWrite);
+                // 回调 ChannelFutureListener
+                // 根据实际的写入数据量更新ChannelOutboundBuffer的缓存状态
+                in.removeBytes(localWrittenBytes);
+                --writeSpinCount;
+                break;
+            }
+            // 如果一次需要写出多个ByteBuffer
+            default: {
+                // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
+                // to check if the total size of all the buffers is non-zero.
+                // We limit the max amount to int above so cast is safe
+                // 算出多个待写出ByteBuffer的大小
+                long attemptedBytes = in.nioBufferSize();
+                // SocketChannel写出ByteBuffers到网络，返回写出的数据量
+                final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
+                if (localWrittenBytes <= 0) {
+                    incompleteWrite(true);
+                    return;
+                }
+                // Casting to int is safe because we limit the total amount of data in the nioBuffers to int above.
+                adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes,
+                        maxBytesPerGatheringWrite);
+                in.removeBytes(localWrittenBytes);
+                // writeSpinCount减去1
+                --writeSpinCount;
+                break;
+            }
+        }
+    } while (writeSpinCount > 0);
+    // setOpWrite 用来表示是不是需要在selector上注册OP_WRITE事件
+    incompleteWrite(writeSpinCount < 0);
+}
+```
+
+
+
+```java
+public ByteBuffer[] nioBuffers(int maxCount, long maxBytes) {
+    assert maxCount > 0;
+    assert maxBytes > 0;
+    long nioBufferSize = 0;
+    int nioBufferCount = 0;
+    final InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
+    // 默认返回一个长度为1024的ByteBuffer数组
+    ByteBuffer[] nioBuffers = NIO_BUFFERS.get(threadLocalMap);
+    Entry entry = flushedEntry;
+    while (isFlushedEntry(entry) && entry.msg instanceof ByteBuf) {
+        if (!entry.cancelled) {
+            ByteBuf buf = (ByteBuf) entry.msg;
+            final int readerIndex = buf.readerIndex();
+            // 计算当前缓存节点的大小
+            final int readableBytes = buf.writerIndex() - readerIndex;
+
+            if (readableBytes > 0) {
+                // 在nioBufferCount！=0 的情况下，如果最大容许写出的数据量小于本次待转化为ByteBuffer的数据量加上已经转化成ByteBuffer的数据量，那么就不再继续做ByteBuffer转化了
+                if (maxBytes - readableBytes < nioBufferSize && nioBufferCount != 0) {
+                    // If the nioBufferSize + readableBytes will overflow maxBytes, and there is at least one entry
+                    // we stop populate the ByteBuffer array. This is done for 2 reasons:
+                    // 1. bsd/osx don't allow to write more bytes then Integer.MAX_VALUE with one writev(...) call
+                    // and so will return 'EINVAL', which will raise an IOException. On Linux it may work depending
+                    // on the architecture and kernel but to be safe we also enforce the limit here.
+                    // 2. There is no sense in putting more data in the array than is likely to be accepted by the
+                    // OS.
+                    //
+                    // See also:
+                    // - https://www.freebsd.org/cgi/man.cgi?query=write&sektion=2
+                    // - https://linux.die.net//man/2/writev
+                    break;
+                }
+                // 更新已经转化成ByteBuffer的缓存节点的总字节大小
+                nioBufferSize += readableBytes;
+                int count = entry.count;
+                if (count == -1) {
+                    //noinspection ConstantValueVariableUse
+                    entry.count = count = buf.nioBufferCount();
+                }
+                // nioBufferCount表示已经转化出的ByteBuffer的个数，因为在目前netty这个版本中nioBuffers.length的初始值是等于maxCount的，
+                // 所以expandNioBufferArray没有机会得到执行
+                int neededSpace = min(maxCount, nioBufferCount + count);
+                if (neededSpace > nioBuffers.length) {
+                    nioBuffers = expandNioBufferArray(nioBuffers, neededSpace, nioBufferCount);
+                    NIO_BUFFERS.set(threadLocalMap, nioBuffers);
+                }
+                if (count == 1) {
+                    ByteBuffer nioBuf = entry.buf;
+                    if (nioBuf == null) {
+                        // cache ByteBuffer as it may need to create a new ByteBuffer instance if its a
+                        // 返回ByteBuf绑定的ByteBuffer(position=readerIndex， limit = readerIndex+readableBytes)的副本
+                        entry.buf = nioBuf = buf.internalNioBuffer(readerIndex, readableBytes);
+                    }
+                    // 设置nioBuffers[nioBufferCount]为当前转化出的ByteBuffer
+                    // 同时更新已经转化出的ByteBuffer的数量
+                    nioBuffers[nioBufferCount++] = nioBuf;
+                } else {
+                    // The code exists in an extra method to ensure the method is not too big to inline as this
+                    // branch is not very likely to get hit very frequently.
+                    nioBufferCount = nioBuffers(entry, buf, nioBuffers, nioBufferCount, maxCount);
+                }
+                // 如果转化的ByeBuffer的个数已经大于等于了maxCount那么结束转化
+                if (nioBufferCount >= maxCount) {
+                    break;
+                }
+            }
+        }
+        entry = entry.next;
+    }
+    // 记录本次转化的ByteBuffer的个数
+    this.nioBufferCount = nioBufferCount;
+    // 记录本次转化出的ByteBuffer的总大小
+    this.nioBufferSize = nioBufferSize;
+
+    return nioBuffers;
+}
+```
+
+
+
+```java
+public void removeBytes(long writtenBytes) {
+    // 如果localWrittenBytes等于attemptedBytes那么把对应的entry从缓存节点中删除
+    // 如果localWrittenBytes不等于attemptedBytes说明本次写入没有把一个msg中包含的数据完整的写到网络上，
+    // 那么需要更新msg对应的ByteBuf读写指针的位置，等待下次继续执行
+    for (;;) {
+        Object msg = current();
+        if (!(msg instanceof ByteBuf)) {
+            assert writtenBytes == 0;
+            break;
+        }
+
+        final ByteBuf buf = (ByteBuf) msg;
+        // 获取缓存数据的对应的ByteBuf的readerIndex
+        final int readerIndex = buf.readerIndex();
+        // 获取ByteBuf保存的缓存数据的大小
+        final int readableBytes = buf.writerIndex() - readerIndex;
+        // 如果写出到网络上的数据量大于本节点的缓存数据大小
+        // 那么意味着本缓存节点entry已经被全部刷到网络上，所以调用remove()，把entry从缓存链上删除
+        if (readableBytes <= writtenBytes) {
+            if (writtenBytes != 0) {
+                // 如果用户设置了写入进度通知的功能，progress通知用户写入进度
+                progress(readableBytes);
+                // 更新写入的数据量
+                writtenBytes -= readableBytes;
+            }
+            // 把entry从缓存链上删除, 并回调 ChannelFutureListener
+            remove();
+        } else { // readableBytes > writtenBytes
+            // 当前缓存节点的数据量大于writtenBytes
+            // 那么需要更新entry对应ByteBuf的readIndex，这时缓存节点entry还是继续保留在缓存链上，等待下一次继续被写出
+            if (writtenBytes != 0) {
+                buf.readerIndex(readerIndex + (int) writtenBytes);
+                progress(writtenBytes);
+            }
+            break;
+        }
+    }
+    clearNioBuffers();
+}
+```
+
+
+
+```java
+public boolean remove() {
+    Entry e = flushedEntry;
+    if (e == null) {
+        clearNioBuffers();
+        return false;
+    }
+    Object msg = e.msg;
+
+    ChannelPromise promise = e.promise;
+    int size = e.pendingSize;
+    // 把entry从缓存链上删除,
+    removeEntry(e);
+
+    if (!e.cancelled) {
+        // only release message, notify and decrement if it was not canceled before.
+        ReferenceCountUtil.safeRelease(msg);
+        // 回调 ChannelFutureListener
+        safeSuccess(promise);
+        decrementPendingOutboundBytes(size, false, true);
+    }
+
+    // recycle the entry
+    e.recycle();
+
+    return true;
+}
+```
