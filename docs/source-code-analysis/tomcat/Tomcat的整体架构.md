@@ -91,7 +91,7 @@ SocketProcessor并不是直接调用的Processor，而是通过org.apache.coyote
 
 - port是Connector监听的端口。
 - protocol是应用层协议名，可填参数有HTTP/1.1、org.apache.coyote.http11.Http11NioProtocol、AJP/1.3、org.apache.coyote.ajp.AjpNioProtocol，如果protocol不填，则默认为Http11NioProtocol。
-- connectionTimeout表示Connector接收到连接后等待超时时间，单位毫秒，默认20秒。
+- connectionTimeout表示Connector读数据（长连接的超时时间）、写数据的超时时间（因为tomcat是服务器端所以不涉及创建连接的超时），单位毫秒，默认20秒。
 - executor表示使用一个共享线程池，若使用私有线程池，则executor不需要指定，私有线程池可选参数有minSpareThreads=“10”、maxThreads=“200”等
 - redirectPort表示非SSL重定向到SSL端口，当请求是non-SSL请求，但是接收到的请求内容需要SSL传输，则重定向到SSL端口。
 

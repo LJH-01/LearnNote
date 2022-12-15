@@ -1,5 +1,11 @@
 # Tomcat处理请求的编解码
 
+
+
+[TOC]
+
+
+
 ## 前言
 
 本文只分析tomcat与spring结合chrome浏览器的使用
@@ -8,10 +14,11 @@
 
 ## 结论
 
-- chrome发送请求时请求行中的编码为utf-8
+- chrome发送请求时请求行以及post请求体中的编码为utf-8
 
 ![image-20220922104755704](assets/image-20220922104755704.png)
 
+- chrome发送请求时请求头中的编码一定是ISO-8859-1
 - 前端发送请求时，指定请求体的编码为utf-8
 
 ![image-20220922105450872](assets/image-20220922105450872.png)
@@ -59,7 +66,11 @@ public static final String DEFAULT_CHARACTER_ENCODING = "ISO-8859-1";
 </filter-mapping>
 ```
 
-## 详细解析处理解析请求
+- 响应的编码需要设置响应头中的**Content-Type**，保证代码中的字符编码格式与**Content-Type**一致，浏览器根据**Content-Type**来解码
+
+  ![image-20221214105348861](assets/image-20221214105348861.png)
+
+## http请求的处理
 
 
 
@@ -523,9 +534,56 @@ public void setCharset(Charset charset) {
 
 
 
+## http响应处理
 
 
 
+### 普通的页面渲染的场景
+
+保证代码中页面的编码与代码中的contentType的编码一致
+
+![image-20221214105348861](assets/image-20221214105348861.png)
+
+### spring中的@ResponseBody标注的返回值
+
+```java
+protected void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
+   converters.clear();
+   converters.add(stringHttpMessageConverter());
+   converters.add(fastJsonHttpMessageConverter());
+}
+
+@Bean
+public FastJsonHttpMessageConverter fastJsonHttpMessageConverter() {
+   FastJsonHttpMessageConverter fastJsonHttpMessageConverter = new FastJsonHttpMessageConverter();
+
+   FastJsonConfig fastJsonConfig = new FastJsonConfig();
+   fastJsonConfig.setSerializerFeatures(
+         SerializerFeature.QuoteFieldNames,
+         SerializerFeature.WriteMapNullValue,//保留空的字段
+         SerializerFeature.WriteNullListAsEmpty,//List null-> []
+         SerializerFeature.WriteDateUseDateFormat,// 日期格式化
+         SerializerFeature.WriteNullStringAsEmpty);//String null -> ""
+
+   List<MediaType> mediaTypeList = new ArrayList<>();
+   mediaTypeList.add(MediaType.APPLICATION_JSON_UTF8);
+   mediaTypeList.add(MediaType.APPLICATION_JSON);
+   fastJsonHttpMessageConverter.setSupportedMediaTypes(mediaTypeList);
+   fastJsonHttpMessageConverter.setFastJsonConfig(fastJsonConfig);
+   return fastJsonHttpMessageConverter;
+}
+
+/**
+ * 在ResponseBody注解下，Spring处理返回值为String时会用到StringHttpMessageConverter
+ *
+ */
+@Bean
+public StringHttpMessageConverter stringHttpMessageConverter() {
+   StringHttpMessageConverter httpMessageConverter = new StringHttpMessageConverter();
+   httpMessageConverter.setDefaultCharset(Charset.forName("UTF-8"));
+   return httpMessageConverter;
+}
+```
 
 
 
