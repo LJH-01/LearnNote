@@ -674,11 +674,16 @@ public boolean canRead(Class<?> clazz, @Nullable MediaType mediaType) {
 }
 ```
 
+FastJsonHttpMessageConverter的supports方法：
+
 ```java
+
 protected boolean supports(Class<?> clazz) {
     return true;
 }
 ```
+
+FastJsonHttpMessageConverter支持两种类型的MediaType：application/json;charset=UTF-8, application/json
 
 ```java
 protected boolean canRead(@Nullable MediaType mediaType) {
@@ -694,9 +699,7 @@ protected boolean canRead(@Nullable MediaType mediaType) {
 }
 ```
 
-而FastJsonHttpMessageConverter支持两种类型的MediaType：application/json;charset=UTF-8, application/json
-
-
+使用FastJsonHttpMessageConverter读取数据并反序列化成对象
 
 ```java
 public Object read(Type type, //
@@ -727,7 +730,35 @@ private Object readType(Type type, HttpInputMessage inputMessage) {
 }
 ```
 
-读取数据并反序列化成对象
+StringHttpMessageConverter的supports方法：
+
+```java
+@Override
+public boolean supports(Class<?> clazz) {
+   return String.class == clazz;
+}
+```
+
+StringHttpMessageConverter支持的MediaType是MediaType.ALL，所以String类型且加@RequestBody标注的参数的都能处理。
+
+使用StringHttpMessageConverter读取数据
+
+```java
+public final T read(Class<? extends T> clazz, HttpInputMessage inputMessage)
+			throws IOException, HttpMessageNotReadableException {
+
+		return readInternal(clazz, inputMessage);
+	}
+
+protected String readInternal(Class<? extends String> clazz, HttpInputMessage inputMessage) throws IOException {
+   Charset charset = getContentTypeCharset(inputMessage.getHeaders().getContentType());
+   return StreamUtils.copyToString(inputMessage.getBody(), charset);
+}
+```
+
+
+
+
 
 #### @RequestParam标注参数以及没有注解的简单参数的参数解析器是：RequestParamMethodArgumentResolver
 
@@ -774,6 +805,7 @@ org.springframework.web.method.annotation.AbstractNamedValueMethodArgumentResolv
 public final Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewContainer mavContainer,
       NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throws Exception {
 
+   // 底层使用 asm 来获取方法中的参数的名称
    NamedValueInfo namedValueInfo = getNamedValueInfo(parameter);
    MethodParameter nestedParameter = parameter.nestedIfOptional();
    // 获取方法的参数名称
@@ -822,7 +854,7 @@ public final Object resolveArgument(MethodParameter parameter, @Nullable ModelAn
 }
 ```
 
-org.springframework.web.method.annotation.AbstractNamedValueMethodArgumentResolver#resolveStringValue
+调用AbstractNamedValueMethodArgumentResolver#resolveStringValue 来解析参数名
 
 ```java
 private Object resolveStringValue(String value) {
@@ -840,20 +872,21 @@ private Object resolveStringValue(String value) {
 }
 ```
 
-org.springframework.web.bind.support.DefaultDataBinderFactory#createBinder
+org.springframework.web.bind.support.DefaultDataBinderFactory#createBinder创建 WebDataBinder，并调用 @InitBinder 标注的方法，在这个方法里面通常registerCustomEditor来注册用户自定义的转换器提供string->指定类的能力
 
 ```java
 public final WebDataBinder createBinder(
-      NativeWebRequest webRequest, @Nullable Object target, String objectName) throws Exception {
+			NativeWebRequest webRequest, @Nullable Object target, String objectName) throws Exception {
 
-   WebDataBinder dataBinder = createBinderInstance(target, objectName, webRequest);
-   if (this.initializer != null) {
-      this.initializer.initBinder(dataBinder, webRequest);
-   }
-   // 调用 @InitBinder 标注的方法
-   initBinder(dataBinder, webRequest);
-   return dataBinder;
-}
+		WebDataBinder dataBinder = createBinderInstance(target, objectName, webRequest);
+		if (this.initializer != null) {
+			// 初始化 WebDataBinder, 设置一些重要属性
+			this.initializer.initBinder(dataBinder, webRequest);
+		}
+		// 调用 @InitBinder 标注的方法
+		initBinder(dataBinder, webRequest);
+		return dataBinder;
+	}
 ```
 
 org.springframework.validation.DataBinder#convertIfNecessary(java.lang.Object, java.lang.Class<T>, org.springframework.core.MethodParameter)
@@ -867,8 +900,6 @@ public <T> T convertIfNecessary(@Nullable Object value, @Nullable Class<T> requi
 }
 ```
 
-org.springframework.beans.TypeConverterSupport#convertIfNecessary(java.lang.Object, java.lang.Class<T>, org.springframework.core.MethodParameter)
-
 ```java
 public <T> T convertIfNecessary(@Nullable Object value, @Nullable Class<T> requiredType, @Nullable MethodParameter methodParam)
       throws TypeMismatchException {
@@ -877,7 +908,7 @@ public <T> T convertIfNecessary(@Nullable Object value, @Nullable Class<T> requi
 }
 ```
 
-org.springframework.beans.TypeConverterSupport#doConvert
+调用org.springframework.beans.TypeConverterSupport#doConvert来进行参数转换，支持用户自定义的转换器以及内置的Converter
 
 ```java
 private <T> T doConvert(@Nullable Object value,@Nullable Class<T> requiredType,
@@ -901,13 +932,13 @@ private <T> T doConvert(@Nullable Object value,@Nullable Class<T> requiredType,
 }
 ```
 
-org.springframework.beans.TypeConverterDelegate#convertIfNecessary(java.lang.String, java.lang.Object, java.lang.Object, java.lang.Class<T>, org.springframework.core.convert.TypeDescriptor)
+真正进行类型转换
 
 ```java
 public <T> T convertIfNecessary(@Nullable String propertyName, @Nullable Object oldValue, @Nullable Object newValue,
 			@Nullable Class<T> requiredType, @Nullable TypeDescriptor typeDescriptor) throws IllegalArgumentException {
 
-		// 获取客户自定义的 PropertyEditor
+		// 获取客户自定义的 PropertyEditor, 在调用 @InitBinder 标注的方法的时候，在registerCustomEditor注册的用户自定义的转换器
 		PropertyEditor editor = this.propertyEditorRegistry.findCustomEditor(requiredType, propertyName);
 
 		ConversionFailedException conversionAttemptEx = null;
@@ -949,122 +980,7 @@ public <T> T convertIfNecessary(@Nullable String propertyName, @Nullable Object 
 			convertedValue = doConvertValue(oldValue, convertedValue, requiredType, editor);
 		}
 
-		boolean standardConversion = false;
-
-		if (requiredType != null) {
-			// Try to apply some standard type conversion rules if appropriate.
-
-			if (convertedValue != null) {
-				if (Object.class == requiredType) {
-					return (T) convertedValue;
-				}
-				else if (requiredType.isArray()) {
-					// Array required -> apply appropriate conversion of elements.
-					if (convertedValue instanceof String && Enum.class.isAssignableFrom(requiredType.getComponentType())) {
-						convertedValue = StringUtils.commaDelimitedListToStringArray((String) convertedValue);
-					}
-					return (T) convertToTypedArray(convertedValue, propertyName, requiredType.getComponentType());
-				}
-				else if (convertedValue instanceof Collection) {
-					// Convert elements to target type, if determined.
-					convertedValue = convertToTypedCollection(
-							(Collection<?>) convertedValue, propertyName, requiredType, typeDescriptor);
-					standardConversion = true;
-				}
-				else if (convertedValue instanceof Map) {
-					// Convert keys and values to respective target type, if determined.
-					convertedValue = convertToTypedMap(
-							(Map<?, ?>) convertedValue, propertyName, requiredType, typeDescriptor);
-					standardConversion = true;
-				}
-				if (convertedValue.getClass().isArray() && Array.getLength(convertedValue) == 1) {
-					convertedValue = Array.get(convertedValue, 0);
-					standardConversion = true;
-				}
-				if (String.class == requiredType && ClassUtils.isPrimitiveOrWrapper(convertedValue.getClass())) {
-					// We can stringify any primitive value...
-					return (T) convertedValue.toString();
-				}
-				else if (convertedValue instanceof String && !requiredType.isInstance(convertedValue)) {
-					if (conversionAttemptEx == null && !requiredType.isInterface() && !requiredType.isEnum()) {
-						try {
-							Constructor<T> strCtor = requiredType.getConstructor(String.class);
-							return BeanUtils.instantiateClass(strCtor, convertedValue);
-						}
-						catch (NoSuchMethodException ex) {
-							// proceed with field lookup
-							if (logger.isTraceEnabled()) {
-								logger.trace("No String constructor found on type [" + requiredType.getName() + "]", ex);
-							}
-						}
-						catch (Exception ex) {
-							if (logger.isDebugEnabled()) {
-								logger.debug("Construction via String failed for type [" + requiredType.getName() + "]", ex);
-							}
-						}
-					}
-					String trimmedValue = ((String) convertedValue).trim();
-					if (requiredType.isEnum() && trimmedValue.isEmpty()) {
-						// It's an empty enum identifier: reset the enum value to null.
-						return null;
-					}
-					convertedValue = attemptToConvertStringToEnum(requiredType, trimmedValue, convertedValue);
-					standardConversion = true;
-				}
-				else if (convertedValue instanceof Number && Number.class.isAssignableFrom(requiredType)) {
-					convertedValue = NumberUtils.convertNumberToTargetClass(
-							(Number) convertedValue, (Class<Number>) requiredType);
-					standardConversion = true;
-				}
-			}
-			else {
-				// convertedValue == null
-				if (requiredType == Optional.class) {
-					convertedValue = Optional.empty();
-				}
-			}
-
-			if (!ClassUtils.isAssignableValue(requiredType, convertedValue)) {
-				if (conversionAttemptEx != null) {
-					// Original exception from former ConversionService call above...
-					throw conversionAttemptEx;
-				}
-				else if (conversionService != null && typeDescriptor != null) {
-					// ConversionService not tried before, probably custom editor found
-					// but editor couldn't produce the required type...
-					TypeDescriptor sourceTypeDesc = TypeDescriptor.forObject(newValue);
-					if (conversionService.canConvert(sourceTypeDesc, typeDescriptor)) {
-						return (T) conversionService.convert(newValue, sourceTypeDesc, typeDescriptor);
-					}
-				}
-
-				// Definitely doesn't match: throw IllegalArgumentException/IllegalStateException
-				StringBuilder msg = new StringBuilder();
-				msg.append("Cannot convert value of type '").append(ClassUtils.getDescriptiveType(newValue));
-				msg.append("' to required type '").append(ClassUtils.getQualifiedName(requiredType)).append("'");
-				if (propertyName != null) {
-					msg.append(" for property '").append(propertyName).append("'");
-				}
-				if (editor != null) {
-					msg.append(": PropertyEditor [").append(editor.getClass().getName()).append(
-							"] returned inappropriate value of type '").append(
-							ClassUtils.getDescriptiveType(convertedValue)).append("'");
-					throw new IllegalArgumentException(msg.toString());
-				}
-				else {
-					msg.append(": no matching editors or conversion strategy found");
-					throw new IllegalStateException(msg.toString());
-				}
-			}
-		}
-
-		if (conversionAttemptEx != null) {
-			if (editor == null && !standardConversion && requiredType != null && Object.class != requiredType) {
-				throw conversionAttemptEx;
-			}
-			logger.debug("Original ConversionService attempt failed - ignored since " +
-					"PropertyEditor based conversion eventually succeeded", conversionAttemptEx);
-		}
+		。。。
 
 		return (T) convertedValue;
 	}
@@ -1072,7 +988,7 @@ public <T> T convertIfNecessary(@Nullable String propertyName, @Nullable Object 
 
 ##### 小结
 
-1. 调用@InitBinder 标注的方法
+1. 调用@InitBinder 标注的方法，在这个方法里面通常registerCustomEditor来注册用户自定义的转换器提供string->指定类的能力
 2. 绑定http请求参数到入参参数（简单参数）中，支持类型转换
 
 #### @PathVariable标注参数的参数解析器是：PathVariableMethodArgumentResolver
@@ -1112,7 +1028,7 @@ protected Object resolveName(String name, MethodParameter parameter, NativeWebRe
 
 ##### 小结
 
-1. 调用@InitBinder 标注的方法
+1. 调用@InitBinder 标注的方法，在这个方法里面通常registerCustomEditor来注册用户自定义的转换器提供string->指定类的能力
 2. 绑定http请求参数到入参参数（简单参数）中，支持类型转换
 
 #### 处理复杂类型的参数解析器是：ServletModelAttributeMethodProcessor
@@ -1295,7 +1211,7 @@ public void setPropertyValue(PropertyValue pv) throws BeansException {
 ##### 小结
 
 1. 先从model中根据类的简单名称（第一个字母小写）获取入参参数类或者反射创建入参参数类
-2. 调用@InitBinder 标注的方法
+2. 调用@InitBinder 标注的方法，在这个方法里面通常registerCustomEditor来注册用户自定义的转换器提供string->指定类的能力
 3. 绑定http请求参数到入参参数类的属性中，支持类型转换，支持递归处理
 
 ## 总结

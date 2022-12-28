@@ -8,6 +8,47 @@
 
 ![image-20221215205342281](assets/image-20221215205342281.png)
 
+## 注入RequestMappingHandlerMapping并实例化
+
+```java
+@Bean
+public RequestMappingHandlerMapping requestMappingHandlerMapping() {
+   RequestMappingHandlerMapping mapping = createRequestMappingHandlerMapping();
+   mapping.setOrder(0);
+   // 设置拦截器
+   mapping.setInterceptors(getInterceptors());
+   mapping.setContentNegotiationManager(mvcContentNegotiationManager());
+   mapping.setCorsConfigurations(getCorsConfigurations());
+
+   PathMatchConfigurer configurer = getPathMatchConfigurer();
+
+   Boolean useSuffixPatternMatch = configurer.isUseSuffixPatternMatch();
+   if (useSuffixPatternMatch != null) {
+      mapping.setUseSuffixPatternMatch(useSuffixPatternMatch);
+   }
+   Boolean useRegisteredSuffixPatternMatch = configurer.isUseRegisteredSuffixPatternMatch();
+   if (useRegisteredSuffixPatternMatch != null) {
+      mapping.setUseRegisteredSuffixPatternMatch(useRegisteredSuffixPatternMatch);
+   }
+   Boolean useTrailingSlashMatch = configurer.isUseTrailingSlashMatch();
+   if (useTrailingSlashMatch != null) {
+      mapping.setUseTrailingSlashMatch(useTrailingSlashMatch);
+   }
+
+   UrlPathHelper pathHelper = configurer.getUrlPathHelper();
+   if (pathHelper != null) {
+      mapping.setUrlPathHelper(pathHelper);
+   }
+   // ant风格 匹配器
+   PathMatcher pathMatcher = configurer.getPathMatcher();
+   if (pathMatcher != null) {
+      mapping.setPathMatcher(pathMatcher);
+   }
+
+   return mapping;
+}
+```
+
 ## 初始化解析映射关系
 
 因为RequestMappingHandlerMapping实现InitializingBean接口所以在spring初始化的时候调用在RequestMappingHandlerMapping的afterPropertiesSet方法，并在其中设置 Method 与 RequestMappingInfo 的映射关系
@@ -261,7 +302,7 @@ public void register(T mapping, Object handler, Method method) {
 }
 ```
 
-小结：
+## 小结
 
 解析映射关系初始化完成。
 

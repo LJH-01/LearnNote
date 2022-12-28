@@ -4,7 +4,49 @@
 
 [TOC]
 
+## 初始化
 
+```java
+@Bean
+public HandlerExceptionResolver handlerExceptionResolver() {
+   List<HandlerExceptionResolver> exceptionResolvers = new ArrayList<>();
+   configureHandlerExceptionResolvers(exceptionResolvers);
+   // 添加默认的 HandlerExceptionResolver
+   if (exceptionResolvers.isEmpty()) {
+      addDefaultHandlerExceptionResolvers(exceptionResolvers);
+   }
+   extendHandlerExceptionResolvers(exceptionResolvers);
+   HandlerExceptionResolverComposite composite = new HandlerExceptionResolverComposite();
+   composite.setOrder(0);
+   composite.setExceptionResolvers(exceptionResolvers);
+   return composite;
+}
+```
+
+```java
+protected final void addDefaultHandlerExceptionResolvers(List<HandlerExceptionResolver> exceptionResolvers) {
+   ExceptionHandlerExceptionResolver exceptionHandlerResolver = createExceptionHandlerExceptionResolver();
+   exceptionHandlerResolver.setContentNegotiationManager(mvcContentNegotiationManager());
+   exceptionHandlerResolver.setMessageConverters(getMessageConverters());
+   exceptionHandlerResolver.setCustomArgumentResolvers(getArgumentResolvers());
+   exceptionHandlerResolver.setCustomReturnValueHandlers(getReturnValueHandlers());
+   if (jackson2Present) {
+      exceptionHandlerResolver.setResponseBodyAdvice(
+            Collections.singletonList(new JsonViewResponseBodyAdvice()));
+   }
+   if (this.applicationContext != null) {
+      exceptionHandlerResolver.setApplicationContext(this.applicationContext);
+   }
+   exceptionHandlerResolver.afterPropertiesSet();
+   exceptionResolvers.add(exceptionHandlerResolver);
+
+   ResponseStatusExceptionResolver responseStatusResolver = new ResponseStatusExceptionResolver();
+   responseStatusResolver.setMessageSource(this.applicationContext);
+   exceptionResolvers.add(responseStatusResolver);
+
+   exceptionResolvers.add(new DefaultHandlerExceptionResolver());
+}
+```
 
 ## SpringMVC中默认加入的HandlerExceptionResoler
 
