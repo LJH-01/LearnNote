@@ -144,7 +144,7 @@ protected HandlerExecutionChain getHandler(HttpServletRequest request) throws Ex
 
 调用 AbstractHandlerMapping#getHandler 来组装 HandlerExecutionChain，其中静态资源与动态资源的 handler 不同，其中动态资源的 handler 是 HandlerMethod；自定义资源映射的 handler 是ParameterizableViewController；静态资源的 handler 是 ResourceHttpRequestHandler；默认资源的 handler 是 DefaultServletHttpRequestHandler。
 具体详见：
-[SpringMVC的HandlerMapping](docs/source-code-analysis/Spring/SpringMVC的HandlerMapping.md)
+[SpringMVC的HandlerMapping](SpringMVC系列二：SpringMVC的HandlerMapping.md)
 
 ```java
 public final HandlerExecutionChain getHandler(HttpServletRequest request) throws Exception {
@@ -237,7 +237,7 @@ protected HandlerMethod getHandlerInternal(HttpServletRequest request) throws Ex
 
 其中根据路径获取 HandlerMethod 是 SpringMVC 初始化的时候已经确定 url 到 HandlerMethod 的映射关系。
 具体详见：
-[RequestMappingHandlerMapping的初始化](docs/source-code-analysis/Spring/RequestMappingHandlerMapping的初始化.md)
+[RequestMappingHandlerMapping的初始化](SpringMVC系列六：RequestMappingHandlerMapping的初始化.md)
 
 
 
