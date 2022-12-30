@@ -427,7 +427,7 @@ public void handleRequest(HttpServletRequest request, HttpServletResponse respon
 提升扩展：
 在spring中也能使用Jsp的原理分析：
 
-[Spring结合Tomcat解决Jsp乱码问题](docs/source-code-analysis/Spring/Spring结合Tomcat解决Jsp乱码问题.md)
+[Spring结合Tomcat解决Jsp乱码问题](../Spring结合Tomcat解决Jsp乱码问题.md)
 
 
 
