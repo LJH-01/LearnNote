@@ -2,7 +2,7 @@
 
 
 
-前置知识：[使用SpringMVC来解析资源](docs/source-code-analysis/Spring/SpringMVC的HandlerMapping.md)
+前置知识：[使用SpringMVC来解析资源](SpringMVC/SpringMVC系列二：SpringMVC的HandlerMapping.md)
 
 分析Tomcat的 url 匹配优先级
 

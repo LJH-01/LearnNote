@@ -12,7 +12,7 @@
 
 得到请求 url 与 RequestMappingInfo 的映射关系到 urlLookup 中；设置 RequestMappingInfo 与 HandlerMethod 的映射关系到 mappingLookup 中。得到 url -> HandlerMethod 的映射关系。
 
-详见[RequestMappingHandlerMapping的初始化](docs/source-code-analysis/Spring/RequestMappingHandlerMapping的初始化.md)
+详见[RequestMappingHandlerMapping的初始化](SpringMVC系列六：RequestMappingHandlerMapping的初始化.md)
 
 ## 处理请求
 

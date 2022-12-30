@@ -874,7 +874,7 @@ public Object resolveArgument(MethodParameter parameter, @Nullable ModelAndViewC
 ```
 
 详细处理流程详见：
-[SpringMVC的参数解析-HandlerMethodArgumentResolver处理流程](docs/source-code-analysis/Spring/SpringMVC的参数解析-HandlerMethodArgumentResolver处理流程.md)
+[SpringMVC的参数解析-HandlerMethodArgumentResolver处理流程](SpringMVC系列三：SpringMVC的参数解析-HandlerMethodArgumentResolver处理流程.md)
 
 #### 反射调用方法
 
@@ -930,7 +930,7 @@ public void handleReturnValue(@Nullable Object returnValue, MethodParameter retu
 ```
 
 详细处理流程详见：
-[SpringMVC的返回值解析-HandlerMethodReturnValueHandler处理流程](docs/source-code-analysis/Spring/SpringMVC的返回值解析-HandlerMethodReturnValueHandler处理流程.md)
+[SpringMVC的返回值解析-HandlerMethodReturnValueHandler处理流程](SpringMVC系列四：SpringMVC的返回值解析-HandlerMethodReturnValueHandler处理流程.md)
 
 ### 调用HandlerInterceptor的postHandle方法
 
@@ -1042,7 +1042,7 @@ protected ModelAndView processHandlerException(HttpServletRequest request, HttpS
 ```
 
 异常处理的详细流程详见：
-[SpringMVC的异常处理-HandlerExceptionResolver处理流程](docs/source-code-analysis/Spring/SpringMVC的异常处理-HandlerExceptionResolver处理流程.md)
+[SpringMVC的异常处理-HandlerExceptionResolver处理流程](SpringMVC系列五：SpringMVC的异常处理-HandlerExceptionResolver处理流程.md)
 
 ### 调用DispatcherServlet的render来渲染视图
 
@@ -1156,7 +1156,7 @@ protected void renderMergedOutputModel(
 
 其中tomcat的路径匹配优先级详见：
 
-[Spring结合Tomcat解决Jsp乱码问题](docs/source-code-analysis/Spring/Spring结合Tomcat解决Jsp乱码问题.md)
+[Spring结合Tomcat解决Jsp乱码问题](../Spring结合Tomcat解决Jsp乱码问题.md)
 
 ### 调用HandlerInterceptor的afterCompletion方法，异常是（resolveException导致、解析页面导致的异常）
 
