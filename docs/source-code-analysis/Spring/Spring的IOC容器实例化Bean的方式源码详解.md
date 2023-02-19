@@ -955,7 +955,7 @@ protected Object resolveAutowiredArgument(MethodParameter param, String beanName
 
 最终使用调用DefaultListableBeanFactory#resolveDependency方法，先根据类型（如果有泛型，则进行泛型类型匹配）从Spring容器中获取匹配的Bean，后根据@Qualifier>@Primary>@Priority>属性名称匹配的顺序选出要注入的Bean。
 
-其中resolveDependency的源码分析参见todo
+其中resolveDependency的源码分析详见[Spring的IOC容器的属性注入源码详解](Spring的IOC容器的属性注入源码详解.md)
 
 继续分析使用InstantiationStrategy策略来实例化Bean，调用SimpleInstantiationStrategy的instantiate方法进行实例化Bean
 

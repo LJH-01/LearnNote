@@ -305,7 +305,7 @@ protected Object getSingleton(String beanName, boolean allowEarlyReference) {
 }
 ```
 
-其中singletonFactories的赋值逻辑是在Bean实例化之后（Bean的实例化参考: todo）
+其中singletonFactories的赋值逻辑是在Bean实例化之后（Bean的实例化详见[Spring的IOC容器实例化Bean的方式源码详解](Spring的IOC容器实例化Bean的方式源码详解.md)）
 
 ```java
 // 完成将实例化的bean提前暴露出去
@@ -709,7 +709,7 @@ protected Object applyBeanPostProcessorsBeforeInstantiation(Class<?> beanClass, 
 }
 ```
 
-调用InstantiationAwareBeanPostProcessor的postProcessBeforeInstantiation方法，在AnnotationAwareAspectJAutoProxyCreator的postProcessBeforeInstantiation方法中获取所有的AOP的advisor以及事务的advisor详见todo
+调用InstantiationAwareBeanPostProcessor的postProcessBeforeInstantiation方法，在AnnotationAwareAspectJAutoProxyCreator的postProcessBeforeInstantiation方法中获取所有的AOP的advisor以及事务的advisor详见[Spring的AOP源码详解](Spring的AOP源码详解.md)
 
 继续分析doCreateBean来真正实例化以及初始化Bean
 
@@ -871,7 +871,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 
 ### 实例化Bean
 
-参考[todo]()
+详见[Spring的IOC容器实例化Bean的方式源码详解](Spring的IOC容器实例化Bean的方式源码详解.md)
 
 ### 预解析注解
 
@@ -1129,7 +1129,7 @@ public void checkConfigMembers(RootBeanDefinition beanDefinition) {
 
 ### 属性注入
 
-参考todo
+详见[Spring的IOC容器的属性注入源码详解](Spring的IOC容器的属性注入源码详解.md)
 
 ### 初始化Bean
 
@@ -1197,10 +1197,10 @@ protected Object initializeBean(final String beanName, final Object bean, @Nulla
 ```
 
 1. 调用BeanNameAware、BeanClassLoaderAware 或 BeanFactoryAware 接口方法
-2. 调用BeanPostProcessor的postProcessBeforeInitialization方法，根据BeanPostProcessor的顺序todo，先调ApplicationContextAwareProcessor来处理EnvironmentAware、EmbeddedValueResolverAware、ResourceLoaderAware、ApplicationEventPublisherAware、MessageSourceAware、ApplicationContextAware等接口方法；后调CommonAnnotationBeanPostProcessor来处理@PostConstruct
+2. 调用BeanPostProcessor的postProcessBeforeInitialization方法，根据BeanPostProcessor的顺序详见[Spring的BeanPostProcessor的顺序](Spring的BeanPostProcessor的顺序.md)，先调ApplicationContextAwareProcessor来处理EnvironmentAware、EmbeddedValueResolverAware、ResourceLoaderAware、ApplicationEventPublisherAware、MessageSourceAware、ApplicationContextAware等接口方法；后调CommonAnnotationBeanPostProcessor来处理@PostConstruct
 3. 调用InitializingBean的afterPropertiesSet方法
 4. 反射调用@Bean(autowire = Autowire.BY_NAME,initMethod = "init")中initMethod指定的方法
-5. 调用BeanPostProcessor的postProcessAfterInitialization方法，根据BeanPostProcessor的顺序todo，先调AbstractAutoProxyCreator的postProcessAfterInitialization来生成需要动态代理的类；后调ApplicationListenerDetector的postProcessAfterInitialization方法如果创建的bean是ApplicationListener的实现类且是单例的，则加入到容器的applicationListeners中。
+5. 调用BeanPostProcessor的postProcessAfterInitialization方法，根据BeanPostProcessor的顺序详见[Spring的BeanPostProcessor的顺序](Spring的BeanPostProcessor的顺序.md)，先调AbstractAutoProxyCreator的postProcessAfterInitialization来生成需要动态代理的类；后调ApplicationListenerDetector的postProcessAfterInitialization方法如果创建的bean是ApplicationListener的实现类且是单例的，则加入到容器的applicationListeners中。
 
 
 
@@ -1268,12 +1268,12 @@ protected Object getObjectForBeanInstance(
 6. 根据bean的作用域采用不同的策略来实例化Bean
 7. 调用MergedBeanDefinitionPostProcessor#postProcessMergedBeanDefinition方法，其中预解析@Autowire、@Value与预解析@PostConstruct、@PreDestroy注解
 8. 将实例化的bean提前暴露出去，暴露到singletonFactories中，用于解决循环依赖
-9. 进行属性注入处理todo
+9. 进行属性注入处理详见[Spring的IOC容器的属性注入源码详解](Spring的IOC容器的属性注入源码详解.md)
 10. 调用BeanNameAware、BeanClassLoaderAware 或 BeanFactoryAware 接口方法
-11. 调用BeanPostProcessor的postProcessBeforeInitialization方法，根据BeanPostProcessor的顺序todo，先调ApplicationContextAwareProcessor来处理EnvironmentAware、EmbeddedValueResolverAware、ResourceLoaderAware、ApplicationEventPublisherAware、MessageSourceAware、ApplicationContextAware等接口方法；后调CommonAnnotationBeanPostProcessor来处理@PostConstruct
+11. 调用BeanPostProcessor的postProcessBeforeInitialization方法，根据BeanPostProcessor的顺序详见[Spring的BeanPostProcessor的顺序](Spring的BeanPostProcessor的顺序.md)，先调ApplicationContextAwareProcessor来处理EnvironmentAware、EmbeddedValueResolverAware、ResourceLoaderAware、ApplicationEventPublisherAware、MessageSourceAware、ApplicationContextAware等接口方法；后调CommonAnnotationBeanPostProcessor来处理@PostConstruct
 12. 调用InitializingBean的afterPropertiesSet方法
 13. 反射调用@Bean(autowire = Autowire.BY_NAME,initMethod = "init")中initMethod指定的方法
-14. 调用BeanPostProcessor的postProcessAfterInitialization方法，根据BeanPostProcessor的顺序todo，先调AbstractAutoProxyCreator的postProcessAfterInitialization来生成需要动态代理的类；后调ApplicationListenerDetector的postProcessAfterInitialization方法如果创建的bean是ApplicationListener的实现类且是单例的，则加入到容器的applicationListeners中。
+14. 调用BeanPostProcessor的postProcessAfterInitialization方法，根据BeanPostProcessor的顺序详见[Spring的BeanPostProcessor的顺序](Spring的BeanPostProcessor的顺序.md)，先调AbstractAutoProxyCreator的postProcessAfterInitialization来生成需要动态代理的类；后调ApplicationListenerDetector的postProcessAfterInitialization方法如果创建的bean是ApplicationListener的实现类且是单例的，则加入到容器的applicationListeners中。
 15. FactoryBean返回的Bean实例特殊处理，返回对应的初始化完成的Bean
 
 ## 参考

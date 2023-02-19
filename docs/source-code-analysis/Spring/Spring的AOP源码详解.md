@@ -228,7 +228,7 @@ public Object postProcessBeforeInstantiation(Class<?> beanClass, String beanName
 
 ```java
 protected boolean shouldSkip(Class<?> beanClass, String beanName) {
-   // TODO: Consider optimization by caching the list of the aspect names
+   // Consider optimization by caching the list of the aspect names
    // 找到容器中所有的Advisor，含AOP和Spring事务
    List<Advisor> candidateAdvisors = findCandidateAdvisors();
    for (Advisor advisor : candidateAdvisors) {
@@ -261,7 +261,7 @@ protected List<Advisor> findCandidateAdvisors() {
 1. 查找容器中所有的Advisor接口的实现类，其中事务的Advisor就是在这里实例化以及初始化的
 2. 创建AOP需要的Advisor
 
-本文只分析AOP的注解实现，调父类的findCandidateAdvisors见todo Spring的事务源码解析
+本文只分析AOP的注解实现，调父类的findCandidateAdvisors详见[Spring的事务结合Mybatis源码详解](Spring的事务结合Mybatis源码详解.md)
 
 继续分析buildAspectJAdvisors方法
 
@@ -744,7 +744,7 @@ protected List<Advisor> findEligibleAdvisors(Class<?> beanClass, String beanName
 }
 ```
 
-1. 获取Spring容器中所有的Advisor，包含Spring的AOP的Advisor以及事务处理的Advisor。findCandidateAdvisors见上文
+1. 获取Spring容器中所有的Advisor，包含Spring的AOP的Advisor以及事务处理的Advisor。findCandidateAdvisors详见[Spring的事务结合Mybatis源码详解](Spring的事务结合Mybatis源码详解.md)
 2. 从所有的Advisor中找出符合条件的Advisor
 3. 如果存在AOP的Advisor，在eligibleAdvisors中第一个增加ExposeInvocationInterceptor.ADVISOR，其中ExposeInvocationInterceptor.ADVISOR用来记录调用的上下文
 
@@ -1101,7 +1101,7 @@ private ShadowMatch getShadowMatch(Method targetMethod, Method originalMethod) {
 
 ## 使用动态代理进行增强
 
-todo
+详见[Spring的AOP之动态代理源码详解](Spring的AOP之动态代理源码详解.md)
 
 
 

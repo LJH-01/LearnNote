@@ -161,7 +161,7 @@ public class ProxyTransactionManagementConfiguration extends AbstractTransaction
 
 ### 增强的时机
 
-增强时机和一致todo见Spring的Aop源码详解
+增强时机和一致详见[Spring的AOP源码详解](Spring的AOP源码详解.md)
 
 只是事务使用findCandidateAdvisors来得到容器中所有的Advisor
 
@@ -440,7 +440,7 @@ protected TransactionAttribute computeTransactionAttribute(Method method, @Nulla
 
 ### 真正的执行逻辑
 
-详细步骤见todo Spring的AOP之动代理源码详解
+详细步骤见[Spring的AOP源码详解](Spring的AOP源码详解.md)
 
 直接分析invocation.proceed()分析责任链模式来调用增强器Advice，以及最后调用真正的方法。
 

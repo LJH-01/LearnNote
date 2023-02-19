@@ -503,7 +503,7 @@ public Object doResolveDependency(DependencyDescriptor descriptor, @Nullable Str
 	}
 ```
 
-1. 处理@Value注解，解析${}以及#{}的逻辑 todo
+1. 处理@Value注解，解析${}以及#{}的逻辑 详见[Spring的${}以及.{}的源码处理](Spring的${}以及.{}的源码处理.md)
 2. 解析注入类型为：Array、Collection、Map。和步骤3类似不分析
 3. 调用findAutowireCandidates方法根据注入的类型，从Spring容器中根据类型（类型如果有泛型，则泛型也要匹配）获取支持的Bean实例，然后再根据@Qualifier注解根据name选出一个，如果bean还没有实例化则返回匹配的bean实例的类型
 4. 如果获取的bean为null，且require为true，则抛异常
@@ -761,7 +761,7 @@ protected boolean checkGenericTypeMatch(BeanDefinitionHolder bdHolder, Dependenc
 
 1. 如果要注入的候选者的类型不存在泛型，由于前面已校验过类型匹配，则直接返回true
 2. 根据获取BeanDefinition要注入的 targetType
-3. 调用ResolvableType的isAssignableFrom方法进行类型匹配（如果有泛型，则进行泛型类型匹配）todo
+3. 调用ResolvableType的isAssignableFrom方法进行类型匹配（如果有泛型，则进行泛型类型匹配）todo有时间分析下
 
 如果选出来多个Bean继续分析determineAutowireCandidate方法来确定多个Bean的优先级
 

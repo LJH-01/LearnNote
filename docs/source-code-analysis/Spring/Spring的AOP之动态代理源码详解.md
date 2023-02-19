@@ -601,7 +601,7 @@ protected Object invokeAdviceMethodWithGivenArgs(Object[] args) throws Throwable
    }
    try {
       ReflectionUtils.makeAccessible(this.aspectJAdviceMethod);
-      // TODO AopUtils.invokeJoinpointUsingReflection
+      // AopUtils.invokeJoinpointUsingReflection
       return this.aspectJAdviceMethod.invoke(this.aspectInstanceFactory.getAspectInstance(), actualArgs);
    }
    catch (IllegalArgumentException ex) {
