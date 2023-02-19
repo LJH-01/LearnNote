@@ -115,7 +115,7 @@ protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable B
 
 ## 构造方法有参注入
 
-todo
+详见[Spring的IOC容器实例化Bean的方式源码详解](Spring的IOC容器实例化Bean的方式源码详解.md)
 
 ## 根据名称注入
 
@@ -503,7 +503,7 @@ public Object doResolveDependency(DependencyDescriptor descriptor, @Nullable Str
 	}
 ```
 
-1. 处理@Value注解，解析${}以及#{}的逻辑 详见[Spring的${}以及.{}的源码处理](Spring的${}以及.{}的源码处理.md)
+1. 处理@Value注解，解析${}以及#{}的逻辑 详见[Spring的${}以及#{}的源码处理](Spring%E7%9A%84%24%7B%7D%E4%BB%A5%E5%8F%8A%23%7B%7D%E7%9A%84%E6%BA%90%E7%A0%81%E5%A4%84%E7%90%86.md)
 2. 解析注入类型为：Array、Collection、Map。和步骤3类似不分析
 3. 调用findAutowireCandidates方法根据注入的类型，从Spring容器中根据类型（类型如果有泛型，则泛型也要匹配）获取支持的Bean实例，然后再根据@Qualifier注解根据name选出一个，如果bean还没有实例化则返回匹配的bean实例的类型
 4. 如果获取的bean为null，且require为true，则抛异常
@@ -1050,7 +1050,7 @@ private InjectionMetadata findAutowiringMetadata(String beanName, Class<?> clazz
 }
 ```
 
-初次调用findAutowiringMetadata方法的时机是AutowiredAnnotationBeanPostProcessor的postProcessMergedBeanDefinition方法，在调postProcessPropertyValues是已经有缓存。其中postProcessMergedBeanDefinition的调用时机 todo
+初次调用findAutowiringMetadata方法的时机是AutowiredAnnotationBeanPostProcessor的postProcessMergedBeanDefinition方法，在调postProcessPropertyValues是已经有缓存。其中postProcessMergedBeanDefinition的调用时机详见[Spring的IOC的Bean生命周期源码详解](Spring的IOC的Bean生命周期源码详解.md)
 
 ```java
 private InjectionMetadata findAutowiringMetadata(String beanName, Class<?> clazz, @Nullable PropertyValues pvs) {
