@@ -107,7 +107,7 @@
 
 [Spring源码解析系列六：Spring的事务结合Mybatis源码详解](docs/source-code-analysis/Spring/Spring的事务结合Mybatis源码详解.md)
 
-[Spring的${}以及#{}的源码处理](docs/source-code-analysis/Spring/Spring的"%$"{}以及#{}的源码处理.md)
+[Spring的${}以及#{}的源码处理](docs/source-code-analysis/Spring/Spring的占位符源码处理.md)
 
 [Spring的BeanPostProcessor的顺序](docs/source-code-analysis/Spring/Spring的BeanPostProcessor的顺序.md)
 
