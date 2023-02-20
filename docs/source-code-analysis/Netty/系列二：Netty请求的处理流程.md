@@ -446,6 +446,40 @@ final ChannelFuture initAndRegister() {
 }
 ```
 
+其中在config().group().register()的时候会根据EventExecutorChooser选出NioEventLoop
+
+```java
+public ChannelFuture register(Channel channel) {
+    return next().register(channel);
+}
+```
+
+```java
+public EventExecutor next() {
+    return chooser.next();
+}
+```
+
+利用EventExecutorChooser选出NioEventLoop，最终在register方法中设置AbstractChannel.this.eventLoop = eventLoop，即Channel有NioEventLoop的引用，即该Channel绑定到哪个NioEventLoop上
+
+继续分析register方法
+
+```java
+public ChannelFuture register(Channel channel) {
+    return register(new DefaultChannelPromise(channel, this));
+}
+```
+
+```java
+public ChannelFuture register(final ChannelPromise promise) {
+    ObjectUtil.checkNotNull(promise, "promise");
+    promise.channel().unsafe().register(this, promise);
+    return promise;
+}
+```
+
+之后再调AbstractUnsafe#register将Channel 注册到 Selector 上
+
 ```java
 public final void register(EventLoop eventLoop, final ChannelPromise promise) {
     ObjectUtil.checkNotNull(eventLoop, "eventLoop");
@@ -458,7 +492,7 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
                 new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
         return;
     }
-
+    // 设置AbstractChannel.this.eventLoop = eventLoop，即Channel有NioEventLoop的引用，即该Channel绑定到哪个NioEventLoop上
     AbstractChannel.this.eventLoop = eventLoop;
 
     if (eventLoop.inEventLoop()) {
