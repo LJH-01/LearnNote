@@ -1420,7 +1420,7 @@ final Buffer sendCommand(int command, String extraData, Buffer queryPacket, bool
    1. 客户端使用mysql协议发送数据到服务端（密码使用sha-1摘要算法加密）
    2. 服务端发送数据给客户端
    3. 客户端使用BIO阻塞获取服务端的数据（设置的socketTimeout读超时时间）并检验返回结果，确保鉴权成功
-3. sql执行的时候也是使用NIO，客户端发数据，服务端返回数据，客户端检验数据正确后，处理数据
+3. sql执行的时候也是使用BIO，客户端发数据，服务端返回数据，客户端检验数据正确后，处理数据
 
 ## 参考
 
