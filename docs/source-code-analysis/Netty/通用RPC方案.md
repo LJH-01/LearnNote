@@ -95,6 +95,12 @@ protected void initChannel(SocketChannel ch) throws Exception {
    }
    ```
 
+
+
+小结:
+
+1. 最终的每个连接的4元组都有一个Netty工作线程组，用于传输数据。-->依赖的jsf接口多（不同的提供方）、依赖方的机器多都会导致机器的连接数较多-->大促巡检的时候能看出每个项目的连接数差距较大。-->在我看来连接数的报警是没有意义的，因为依赖方如果加机器你就报警啦，但是报警没有任何意义
+
 其中ClientChannelInitializer中加入编码器以及解码器进行编解码通信，以及ClientChannelHandler来处理请求的msgId与响应的msgId的对应关系
 
 
