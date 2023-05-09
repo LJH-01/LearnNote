@@ -51,7 +51,7 @@
 
 [Mysql的事务](docs/database/mysql/Mysql的事务.md)
 
-[Mysql的Buffer pool](docs/database/mysql/Mysql的Buffer pool.md)
+[Mysql的Buffer pool](docs/database/mysql/Mysql的Buffer-pool.md)
 
 [Mysql小的知识点](docs/database/mysql/Mysql小的知识点.md)
 
