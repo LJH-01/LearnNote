@@ -8,11 +8,37 @@
 
 [CompletableFuture之get()源码](docs/java/concurrent/ForkJoinPool源码解析/CompletableFuture之get()源码.md)
 
-## 网络
+## 计算机基础
+
+### 网络
 
 [HttpClient长连接及线程安全原理](docs/cs-basics/network/HttpClient长连接及线程安全原理.md)
 
 [计算机网络](docs/cs-basics/network/计算机网络.md)
+
+### 数据结构与算法
+
+[刷题记录](docs/leetcode/刷题记录.md)
+
+## 数据库
+
+### MySQL
+
+[Mysql笔记](docs/database/mysql/Mysql笔记.md)
+
+### Redis
+
+[Redis笔记](docs/database/mysql/Mysql笔记.md)
+
+## 中间件
+
+### Zookeeper
+
+[Zookeeper解析](docs/tools/Zookeeper解析.md)
+
+### kafka
+
+[Kafka解析](docs/tools/Kafka解析.md)
 
 ## 线上问题记录
 
@@ -91,26 +117,3 @@
 
 [Spring结合Tomcat解决Jsp乱码问题](docs/source-code-analysis/Spring/Spring结合Tomcat解决Jsp乱码问题.md)
 
-## 数据结构与算法
-
-[刷题记录](docs/leetcode/刷题记录.md)
-
-## 数据库
-
-### MySQL
-
-[Mysql笔记](docs/database/mysql/Mysql笔记.md)
-
-### Redis
-
-[Redis笔记](docs/database/mysql/Mysql笔记.md)
-
-## 中间件
-
-### Zookeeper
-
-[Zookeeper解析](docs/tools/Zookeeper解析.md)
-
-### kafka
-
-[Kafka解析](docs/tools/Kafka解析.md)
