@@ -16,8 +16,6 @@
 
 [计算机网络](docs/cs-basics/network/计算机网络.md)
 
-### 数据结构与算法
-
 ## 线上问题记录
 
 [线上问题记录](docs/problem/线上问题记录.md)
@@ -94,6 +92,10 @@
 [Spring的BeanPostProcessor的顺序](docs/source-code-analysis/Spring/Spring的BeanPostProcessor的顺序.md)
 
 [Spring结合Tomcat解决Jsp乱码问题](docs/source-code-analysis/Spring/Spring结合Tomcat解决Jsp乱码问题.md)
+
+## 数据结构与算法
+
+[刷题记录](docs/leetcode/刷题记录.md)
 
 ## 数据库
 
