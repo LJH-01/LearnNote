@@ -40,10 +40,6 @@
 
 [Kafka解析](docs/tools/Kafka解析.md)
 
-## 线上问题记录
-
-[线上问题记录](docs/problem/线上问题记录.md)
-
 ## 源码分析
 
 ### 客户端分析
@@ -117,3 +113,6 @@
 
 [Spring结合Tomcat解决Jsp乱码问题](docs/source-code-analysis/Spring/Spring结合Tomcat解决Jsp乱码问题.md)
 
+## 线上问题记录
+
+[线上问题记录](docs/problem/线上问题记录.md)
