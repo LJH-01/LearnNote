@@ -18,8 +18,6 @@
 
 ### 网络
 
-[HttpClient长连接及线程安全原理](docs/cs-basics/network/HttpClient长连接及线程安全原理.md)
-
 [计算机网络](docs/cs-basics/network/计算机网络.md)
 
 [Java的零拷贝技术](docs/cs-basics/network/Java的零拷贝技术.md)
@@ -51,6 +49,8 @@
 ## 源码分析
 
 ### 客户端分析
+
+[HttpClient长连接及线程安全原理](docs/cs-basics/network/HttpClient长连接及线程安全原理.md)
 
 [通用RPC方案](docs/source-code-analysis/Netty/通用RPC方案.md)
 
