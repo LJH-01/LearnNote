@@ -1,5 +1,11 @@
 ## Java
 
+### 基础
+
+[Java基础记事本](docs/java/basics/Java知识点.md)
+
+[Java泛型](docs/java/basics/你真的了解Java泛型参数.md)
+
 ### 并发
 
 [ForkJoinPool详解](docs/java/concurrent/ForkJoinPool源码解析/ForkJoinPool源码详解.md)
