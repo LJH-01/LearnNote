@@ -18,7 +18,7 @@ Doug Lea在 “[Scalable IO in Java](http://gee.cs.oswego.edu/dl/cpjslides/nio.p
 
 ### 单Reactor+多线程模型
 
-**Tomcat使用的这种模型**
+**Tomcat处理read和write请求使用的是这种模型（不含图中的acceptor，tomcat是阻塞获取connect请求）**
 
 ![image-20220801205640735](assets/image-20220801205640735.png)
 
