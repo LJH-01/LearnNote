@@ -157,7 +157,7 @@ Tomcat所有的组件均存在初始化、启动、停止等生命周期方法�
       2. 调StandardRoot.startInternal初始化该context要加载的资源
       3. 实例化WebappLoader
       4. 调WebappLoader.startInternal初始化该context的类加载器ParallelWebappClassLoader
-      5. 利用 ContextConfig.lifecycleEvent 解析 web.xml
+      5. 利用 ContextConfig.lifecycleEvent 解析 web.xml，其中利用类加载器ParallelWebappClassLoader来实例化ServletContainerInitializer（SpringBoot利用这个特性不使用web.xml）
       6. 实例化DefaultInstanceManager，在DefaultInstanceManager保存了tomcatClassLoader：commonClassLoader和context应用类加载器：ParallelWebappClassLoader
       7. 调用 ServletContainerInitializer.onStartup 方法
       8. 委托DefaultInstanceManager使用ParallelWebappClassLoader来实例化EventListener, 并调用ServletContextListener的contextInitialized方法
