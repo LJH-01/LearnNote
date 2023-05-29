@@ -34,7 +34,7 @@
 
 ### Redis
 
-[Redis笔记](docs/database/mysql/Mysql笔记.md)
+[Redis笔记](docs/database/Redis/Redis笔记.md)
 
 ## 中间件
 
