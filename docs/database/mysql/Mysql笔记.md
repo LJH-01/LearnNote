@@ -408,7 +408,13 @@ count(1)、 count(*)、 count(主键字段)在执行的时候，如果表里存�
 
 ## 加字段以及加索引是否锁表
 
+**ALTER TABLE 加字段会加锁**。只是Mysql5.6版本之后新增了ONLINE DDL的功能，可以使该表不能使用的时间大大缩短。
 
+MySQL 5.6之后支持Online DDL特性，不需要锁表，具体见
+
+[MySQL Online DDL 使用](https://help.aliyun.com/document_detail/41733.html)
+
+[pt-online-schema-change的原理解析与应用说明 ](https://www.cnblogs.com/xinysu/p/6758170.html)
 
 ## 参考
 
