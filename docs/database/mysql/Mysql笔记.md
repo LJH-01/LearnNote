@@ -211,6 +211,10 @@ show variables like 'expire_logs_days';
 
 在 MySQL 的 InnoDB 存储引擎中，开启 binlog 的情况下，MySQL 会同时维护 binlog 日志与 InnoDB 的 redo log，为了保证这两个日志的一致性，MySQL 使用了**内部 XA 事务**，内部 XA 事务由 binlog 作为协调者，存储引擎是参与者。
 
+![image-20230601180631987](assets/image-20230601180631987.png)
+
+
+
 ![image-20230426163918849](assets/image-20230426163918849.png)
 
 ## Redo log 和 Binlog 
