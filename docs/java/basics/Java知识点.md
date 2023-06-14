@@ -43,9 +43,10 @@ HotSpot也是发展的，由于[一些问题](http://openjdk.java.net/jeps/122)�
 
 ### 线程中断
 
-1. java.lang.Thread#interrupt方法：实例方法，中断该线程，实际上只是给线程设置一个中断标志，线程仍会继续运行。
+1. java.lang.Thread#interrupt方法：实例方法，中断该线程，实际上只是给线程设置一个中断标志。线程如果正在运行仍会继续运行；如使用了sleep,同步锁的wait,socket中的receiver,accept等方法时，会抛出InterruptException异常
 2. java.lang.Thread#interrupted方法：类方法，返回一个boolean并清除中断状态，第二次再调用时中断状态已经被清除，将返回一个false。
-
+ReentrantLock 中 parkAndCheckInterrupt() 为会么会调用Thread.interrupted()？
+3. LockSupport.park()，可通过两种方式被唤醒，LockSupport.unpark() 或者 interrupt()，若有中断标志，park就不阻塞线程，所以JDK中被唤醒之后都会调用Thread#interrupted方法来清楚中断状态。
 
 
 
@@ -85,22 +86,52 @@ HotSpot也是发展的，由于[一些问题](http://openjdk.java.net/jeps/122)�
 
 
 
+## Java的增强技术
+
+如下图，从软件的开发周期来看，可织入埋点的时机主要有 3 个阶段：编译期、编译后和运行期。
+
+![image-20230613172245043](assets/image-20230613172245043.png)
+
+### 编译期
+
+这里的编译期指将Java源文件编译为class字节码的过程。Java编译器提供了基于 JSR 269 规范[1]的注解处理器机制，通过操作AST （抽象语法树，Abstract Syntax Tree，下同）实现逻辑的织入。业内有不少基于此机制的应用，比如Lombok 、MapStruct 、JPA 等；此机制的优点是因为在编译期执行，可以将问题前置，没有多余依赖，因此做出来的工具使用起来比较方便。缺点也很明显，要熟练操作 AST并不是想的那么简单，不理解前后关联的流程写出来的代码不够稳定，因此要花大量时间熟悉编译器底层原理。当然这个过程对使用者来讲是没有感知的。
+
+### 编译后
+
+编译后是指编译成 class 字节码之后，通过字节码进行增强的过程。此阶段插桩需要适配不同的构建工具：Maven、Gradle、Ant、Ivy等，也需要使用方增加额外的构建配置，因此存在开发量大和使用不够方便的问题，首先要排除掉此选项。可能只有极少数场景下才会需要在此阶段插桩。
+
+### 运行期
+
+运行期是指在程序启动后，在运行时进行增强的过程，这个阶段有 3 种方式可以织入逻辑，按照启动顺序，可以分为：静态 Agent、AOP 和动态 Agent。
+
+#### 静态 Agent
+
+JVM 启动时使用 -javaagent 载入指定 jar 包，调用 MANIFEST.MF 文件里的 Premain-Class 类的 premain 方法触发织入逻辑。是技术中间件最常使用的方式，借助字节码工具完成相关工作。应用此机制的中间件有很多，比如：京东内部的链路监控 pfinder、外部开源的 skywalking 的探针、阿里的 TTL 等等。这种方式优点是整体比较成熟，缺点主要是兼容性问题，要测试不同的 JDK 版本代价较大，出现问题只能在线上发现。同时如果不是专业的中间件团队，还是存在一定的技术门槛，维护成本比较高；
+
+#### Spring AOP
+
+Spring AOP大家都不陌生，通过 Spring 代理机制，可以在方法调用前后织入逻辑。AOP 最大的优点是使用简单，同样存在不少缺点：
+
+1. 需要两次反射，一次是增强里面的反射，一次是需要执行方法的反射
+2. 私有方法、静态方法、final class和方法等场景无法走切面
+
+#### 动态 Agent
+
+动态加载jar包，调用MANIFEST.MF文件中声明的Agent-Class类的agentmain方法触发织入逻辑。这种方式主要用来线上动态调试，使用此机制的中间件也有很多，比如：Btrace、Arthas等，此方式不适合常驻内存使用，因此要排除掉。
+
+### 最终方案
+
+选择通过上面的分析梳理可知，要实现重复代码的抽象有 3 种方式：基于JSR 269 的插桩、基于 Java Agent 的字节码增强、基于Spring AOP的自定义切面。接下来进一步的对比：
 
 
 
+![image-20230613172427353](assets/image-20230613172427353.png)
 
 
 
+如上表所示，从实现成本上来看，AOP 最简单，但这个方案不能覆盖所有场景，存在一定的局限性，不符合我们追求极致的调性，因此首先排除。Java Agent 能达到的效果与 JSR 269 相同，但是启动参数里需要增加 -javaagent 配置，有少量的运维工作，同时还有 JDK 兼容性的坑需要趟，对非中间件团队来说，这种方式从长久看会带来负担，因此也要排除。
 
-
-
-
-
-
-
-
-
-
+基于 JSR 269 的插桩方式，对Java编译器工作流程的理解和 AST 的操作会带来实现上的复杂性，前期投入比较大，但是组件一旦成型，会带来一劳永逸的解决方案，可以很自信的讲，插桩实现的组件是监控埋点场景里的银弹（事实证明了这点，不然也不敢这么吹）。
 
 
 
@@ -123,3 +154,5 @@ https://pdai.tech/md/java/basic/java-basic-lan-basic.html#string-intern
 https://blog.csdn.net/weixin_44250483/article/details/121338111
 
 https://blog.csdn.net/qq_45795744/article/details/123493673
+
+https://zhuanlan.zhihu.com/p/548844443
