@@ -1265,7 +1265,7 @@ protected Object getObjectForBeanInstance(
 3. 根据beanName先从父容器中查找
 4. 如果要创建的bean含有@DependsOn注解，先加载@DependsOn指定的Bean
 5. 调用InstantiationAwareBeanPostProcessor的postProcessBeforeInstantiation方法，在AnnotationAwareAspectJAutoProxyCreator的postProcessBeforeInstantiation方法中获取所有的AOP的advisor以及事务的advisor
-6. 根据bean的作用域采用不同的策略来实例化Bean
+6. 根据bean的作用域采用不同的策略来实例化Bean详见[Spring的IOC容器实例化Bean的方式源码详解](Spring的IOC容器实例化Bean的方式源码详解.md)
 7. 调用MergedBeanDefinitionPostProcessor#postProcessMergedBeanDefinition方法，其中预解析@Autowire、@Value与预解析@PostConstruct、@PreDestroy注解
 8. 将实例化的bean提前暴露出去，暴露到singletonFactories中，用于解决循环依赖
 9. 进行属性注入处理详见[Spring的IOC容器的属性注入源码详解](Spring的IOC容器的属性注入源码详解.md)
